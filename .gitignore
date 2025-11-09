@@ -1,0 +1,78 @@
+# ========================
+# Python / Virtual env
+# ========================
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+*.pkl
+*.pth
+
+# ========================
+# OS / IDE files
+# ========================
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# VS Code
+.vscode/
+.idea/
+
+# ========================
+# Application runtime data
+# ========================
+# Downloaded temporary audio files
+data/raw_audio/
+data/raw_audio/*
+
+# Transcripts & analysis results (generated every hour)
+data/transcriptions/
+data/transcriptions/*
+
+data/analysis_results/
+data/analysis_results/*
+
+# Whisper + HuggingFace model cache
+.whisper/
+whisper/
+.cache/
+cache/
+huggingface/
+.huggingface/
+*.safetensors
+
+# ========================
+# FastAPI / Uvicorn logs
+# ========================
+backend/logs/
+*.log
+
+# ========================
+# Environment configs
+# ========================
+.env
+.env.*
+*.ini
+
+# ========================
+# Node (future frontend)
+# ========================
+node_modules/
+dist/
+build/
+
+# ========================
+# Backup files
+# ========================
+*.bak
+*.tmp
+*.old
+*.orig
+
