@@ -13,10 +13,13 @@ __pycache__/
 
 # Downloads
 downloads/
+downloads/audio/
+downloads/text_files/
 *.mp3
 *.m4a
 *.webm
 *.opus
+*.txt
 
 # IDE
 .vscode/

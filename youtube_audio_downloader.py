@@ -216,7 +216,7 @@ def download_live_stream_audio(url: str, past_hours: int, output_dir: str = 'dow
         os.rmdir(temp_dir)
         
         print(f"✓ Successfully downloaded live stream audio (past {past_hours} hour(s)) from: {url}\n")
-        return True
+        return final_output
         
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr if e.stderr else (e.stdout if e.stdout else 'Unknown error')
@@ -282,6 +282,11 @@ def download_stored_video(url: str, output_dir: str = 'downloads') -> bool:
             print(f"Downloading full video audio from: {url} (trying {client} client)")
             result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=300)
             print(f"✓ Successfully downloaded full video audio from: {url}\n")
+            # Find and return the downloaded file path
+            import glob
+            downloaded_files = glob.glob(os.path.join(output_dir, '*.mp3'))
+            if downloaded_files:
+                return max(downloaded_files, key=os.path.getmtime)
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             continue
@@ -305,6 +310,14 @@ def download_stored_video(url: str, output_dir: str = 'downloads') -> bool:
         print(f"Downloading full video audio from: {url} (fallback method)")
         result = subprocess.run(cmd, check=True, capture_output=True, text=True)
         print(f"✓ Successfully downloaded full video audio from: {url}\n")
+        
+        # Return the downloaded file path for transcription
+        # Find the downloaded file
+        import glob
+        downloaded_files = glob.glob(os.path.join(output_dir, '*.mp3'))
+        if downloaded_files:
+            # Return the most recently modified file
+            return max(downloaded_files, key=os.path.getmtime)
         return True
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr if e.stderr else (e.stdout if e.stdout else 'Unknown error')
@@ -323,18 +336,23 @@ def download_stored_video(url: str, output_dir: str = 'downloads') -> bool:
 def download_from_list(
     video_urls: List[str], 
     past_hours: int = 1,
-    output_dir: str = 'downloads'
+    output_dir: str = 'downloads',
+    auto_transcribe: bool = True,
+    transcription_model: str = 'base'
 ) -> dict:
     """
     Download audio from a list of YouTube live streams or stored live videos.
     
     - For live streams: Downloads audio for the past N hours
     - For stored videos (that were live): Downloads the full video audio
+    - Optionally transcribes audio to text (English, Hindi, or mixed)
     
     Args:
         video_urls: List of YouTube video URLs (live streams or stored live videos)
         past_hours: For live streams, download audio from past N hours
         output_dir: Directory to save audio files
+        auto_transcribe: If True, automatically transcribe downloaded audio
+        transcription_model: Whisper model size ('tiny', 'base', 'small', 'medium', 'large')
     
     Returns:
         Dictionary with download statistics
@@ -368,8 +386,22 @@ def download_from_list(
         if is_live_stream(video_info):
             print(f"  📡 Live stream detected - downloading past {past_hours} hour(s) of audio")
             stats['live_streams'] += 1
-            if download_live_stream_audio(url, past_hours, output_dir):
+            result = download_live_stream_audio(url, past_hours, output_dir)
+            if result:
                 stats['downloaded'] += 1
+                # Auto-transcribe if enabled
+                if auto_transcribe and isinstance(result, str) and os.path.exists(result):
+                    print(f"  🎤 Starting transcription...")
+                    try:
+                        from audio_transcriber import transcribe_audio
+                        transcribe_audio(
+                            result,
+                            output_dir=os.path.join(output_dir, 'text_files'),
+                            audio_storage_dir=os.path.join(output_dir, 'audio'),
+                            model_size=transcription_model
+                        )
+                    except Exception as e:
+                        print(f"  ⚠ Transcription failed: {e}")
             else:
                 stats['failed'] += 1
         
@@ -377,8 +409,31 @@ def download_from_list(
         elif was_live_stream(video_info):
             print(f"  💾 Stored live video detected - downloading full video audio")
             stats['stored_videos'] += 1
-            if download_stored_video(url, output_dir):
+            result = download_stored_video(url, output_dir)
+            if result:
                 stats['downloaded'] += 1
+                # Auto-transcribe if enabled
+                if auto_transcribe:
+                    audio_file = result if isinstance(result, str) else None
+                    if not audio_file:
+                        # Find the most recently downloaded file
+                        import glob
+                        downloaded_files = glob.glob(os.path.join(output_dir, '*.mp3'))
+                        if downloaded_files:
+                            audio_file = max(downloaded_files, key=os.path.getmtime)
+                    
+                    if audio_file and os.path.exists(audio_file):
+                        print(f"  🎤 Starting transcription...")
+                        try:
+                            from audio_transcriber import transcribe_audio
+                            transcribe_audio(
+                                audio_file,
+                                output_dir=os.path.join(output_dir, 'text_files'),
+                                audio_storage_dir=os.path.join(output_dir, 'audio'),
+                                model_size=transcription_model
+                            )
+                        except Exception as e:
+                            print(f"  ⚠ Transcription failed: {e}")
             else:
                 stats['failed'] += 1
         
@@ -402,6 +457,8 @@ def main():
     # Configuration
     PAST_HOURS = 1  # For live streams: download audio from past 1 hour
     OUTPUT_DIR = 'downloads'  # Directory to save audio files
+    AUTO_TRANSCRIBE = True  # Automatically transcribe downloaded audio
+    TRANSCRIPTION_MODEL = 'base'  # Whisper model: 'tiny', 'base', 'small', 'medium', 'large'
     
     # Check dependencies
     check_dependencies()
@@ -424,7 +481,9 @@ def main():
     stats = download_from_list(
         video_urls=video_urls,
         past_hours=PAST_HOURS,
-        output_dir=OUTPUT_DIR
+        output_dir=OUTPUT_DIR,
+        auto_transcribe=AUTO_TRANSCRIBE,
+        transcription_model=TRANSCRIPTION_MODEL
     )
     
     # Print summary
