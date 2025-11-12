@@ -85,24 +85,102 @@ def transcribe_audio(
     
     print(f"Transcribing: {audio_file.name}")
     
-    # Transcribe with translation to English
-    # This handles Hindi, English, and mixed content automatically
+    # Improved approach for Hindi-English mixed content
+    # Use better settings and prompts for financial/news content
     try:
+        # Enhanced prompt for better translation quality
+        initial_prompt = (
+            "This is a financial news broadcast in Hindi and English. "
+            "When translating Hindi to English, preserve English words exactly as spoken, "
+            "especially company names (Reliance, TCS, Infosys), stock indices (Nifty, Sensex), "
+            "financial terms (crore, lakh, rupees), and numbers. "
+            "Translate only Hindi portions while keeping English portions unchanged."
+        )
+        
+        # First, detect the language
+        print("  Detecting language...")
+        detect_result = model.transcribe(
+            str(audio_file),
+            language=None,
+            task="transcribe",
+            verbose=False
+        )
+        detected_language = detect_result.get('language', 'unknown')
+        print(f"  Detected language: {detected_language}")
+        
+        # Translate with optimized settings
+        print("  Translating to English...")
         result = model.transcribe(
             str(audio_file),
-            language=None,  # Auto-detect language
-            task="translate"  # Translate to English
+            language=detected_language if detected_language != 'unknown' else None,
+            task="translate",
+            initial_prompt=initial_prompt,
+            condition_on_previous_text=True,  # Use context for better coherence
+            temperature=0.0,  # Lower temperature for more consistent output
+            best_of=2,  # Try multiple decodings
+            beam_size=5,  # Beam search for better quality
+            patience=1.0,
+            compression_ratio_threshold=2.4,  # Filter out repetitive content
+            logprob_threshold=-1.0,  # Filter low-confidence segments
+            no_speech_threshold=0.6  # Better handling of silence
         )
+        
+        text = result.get('text', '').strip()
+        
+        # Post-process to improve quality
+        # Fix common translation artifacts
+        import re
+        # Remove excessive spaces
+        text = re.sub(r'\s+', ' ', text)
+        # Fix spacing around punctuation
+        text = re.sub(r'\s+([.,!?;:])', r'\1', text)
+        text = re.sub(r'([.,!?;:])\s*([A-Z])', r'\1 \2', text)
+        # Fix common garbled patterns (very short words that are likely errors)
+        words = text.split()
+        cleaned_words = []
+        for word in words:
+            # Keep words that are meaningful (length > 2) or common short words
+            if len(word) > 2 or word.lower() in ['is', 'in', 'on', 'at', 'to', 'of', 'it', 'we', 'he', 'be', 'do', 'go', 'no', 'so', 'up', 'if', 'my', 'me', 'us', 'an', 'as', 'or', 'am', 'hi', 'ok']:
+                cleaned_words.append(word)
+            # Skip very short garbled words (likely translation errors)
+        text = ' '.join(cleaned_words)
+        
+        # If translation seems poor (too many short words), try with explicit language
+        if detected_language == 'hi':
+            words_check = text.split()
+            if len(words_check) > 0:
+                short_ratio = sum(1 for w in words_check if len(w) <= 2) / len(words_check)
+                if short_ratio > 0.25:  # More than 25% very short words suggests poor translation
+                    print("  Retrying with optimized Hindi translation settings...")
+                    result = model.transcribe(
+                        str(audio_file),
+                        language='hi',
+                        task="translate",
+                        initial_prompt=initial_prompt,
+                        condition_on_previous_text=True,
+                        temperature=0.0,
+                        best_of=3,  # More attempts for better quality
+                        beam_size=5
+                    )
+                    text = result.get('text', text).strip()
+                    # Re-apply post-processing
+                    text = re.sub(r'\s+', ' ', text)
+                    text = re.sub(r'\s+([.,!?;:])', r'\1', text)
+                    text = re.sub(r'([.,!?;:])\s*([A-Z])', r'\1 \2', text)
+        
     except Exception as e:
         print(f"✗ Transcription failed: {e}")
         return None
     
-    # Get detected language
-    detected_language = result.get('language', 'unknown')
-    text = result.get('text', '').strip()
-    
-    print(f"  Detected language: {detected_language}")
     print(f"  Transcription length: {len(text)} characters")
+    
+    # Warn about model size for better quality
+    if model_size in ['tiny', 'base'] and detected_language == 'hi':
+        print(f"  ⚠ Tip: For better Hindi-English translation, consider using 'small' or larger model")
+    
+    # Ensure detected_language is set
+    if 'detected_language' not in locals():
+        detected_language = result.get('language', 'unknown')
     
     # Generate output filename
     audio_stem = audio_file.stem

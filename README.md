@@ -165,8 +165,12 @@ downloads/
 - Requires `ffprobe` (comes with ffmpeg) for duration detection
 - **Transcription**: 
   - Supports English, Hindi, and mixed (Hindi + English) content
-  - Automatically translates to English
+  - Automatically translates to English with improved quality
+  - Uses optimized Whisper settings (beam search, better prompts, post-processing)
+  - Includes quality checks and automatic retry for poor translations
+  - Filters out garbled words and fixes common translation artifacts
   - First run downloads the Whisper model (~74MB for 'base' model)
+  - **For best Hindi-English translation quality, use 'small' or larger models**
   - Transcription happens automatically after download (if enabled)
   - Can also transcribe existing audio files separately
 
