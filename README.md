@@ -208,3 +208,95 @@ downloads/
   - Uses lightweight local libraries (TextBlob recommended, or keyword-based fallback)
   - Automatically downloads NLTK data on first run (TextBlob requirement)
 
+## Multiple Prediction Models
+
+The project includes **5 different prediction models** using different strategies. You can run all models and compare their predictions to find the most accurate approach.
+
+### Available Models
+
+1. **Model 1: Keyword Frequency & Financial Signals**
+   - Strategy: Counts buy/sell keywords and financial action words around company mentions
+   - Output: `model1_keyword_frequency_predictions.json`
+
+2. **Model 2: TF-IDF Based Analysis**
+   - Strategy: Uses Term Frequency-Inverse Document Frequency to identify important financial terms
+   - Output: `model2_tfidf_predictions.json`
+
+3. **Model 3: Context Window Analysis**
+   - Strategy: Analyzes surrounding words (context window) around company mentions
+   - Output: `model3_context_window_predictions.json`
+
+4. **Model 4: Pattern Matching & Stock Market Phrases**
+   - Strategy: Matches specific stock market phrases and patterns to identify trading signals
+   - Output: `model4_pattern_matching_predictions.json`
+
+5. **Model 5: Weighted Multi-Factor Scoring**
+   - Strategy: Combines multiple factors (sentiment, frequency, context, patterns) with weights
+   - Output: `model5_weighted_scoring_predictions.json`
+
+### Running All Models
+
+**Run all models and generate comparison:**
+
+```bash
+python run_all_models.py
+```
+
+This will:
+- Run all 5 models sequentially
+- Generate individual prediction files for each model
+- Create a comparison report (`model_comparison.json`) showing:
+  - Consensus predictions across models
+  - Agreement percentages
+  - Vote counts (positive/negative/neutral)
+
+**Run individual models:**
+
+```bash
+# Model 1
+python models/model1_keyword_frequency.py
+
+# Model 2
+python models/model2_tfidf_analysis.py
+
+# Model 3
+python models/model3_context_window.py
+
+# Model 4
+python models/model4_pattern_matching.py
+
+# Model 5
+python models/model5_weighted_scoring.py
+```
+
+### Comparing Model Predictions
+
+After running all models, check `downloads/analysis/model_comparison.json` to see:
+- Which companies have high agreement across models (more reliable predictions)
+- Which companies have low agreement (models disagree, less confidence)
+- Consensus predictions when models agree
+- Individual model predictions for each company
+
+**Example comparison output:**
+```json
+{
+  "companies": {
+    "Reliance": {
+      "consensus_prediction": "POSITIVE",
+      "agreement": 0.8,
+      "positive_votes": 4,
+      "negative_votes": 0,
+      "neutral_votes": 1
+    }
+  }
+}
+```
+
+### Model Comparison Strategy
+
+- **High Agreement (≥80%)**: Models agree strongly - higher confidence in prediction
+- **Medium Agreement (50-80%)**: Models mostly agree - moderate confidence
+- **Low Agreement (<50%)**: Models disagree - lower confidence, may need more data
+
+Use the comparison to identify which model strategy works best for your specific use case and data type.
+
