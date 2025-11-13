@@ -57,6 +57,8 @@ setup.bat
 - **ffmpeg** - Audio/video processing (system package, must be installed separately)
 - **Whisper** - Speech-to-text and translation (installed via requirements.txt)
 - **PyTorch** - Required for Whisper (installed via requirements.txt)
+- **TextBlob** - Sentiment analysis (installed via requirements.txt, lightweight)
+- **Matplotlib** - Chart generation (installed via requirements.txt)
 
 ## Usage
 
@@ -114,6 +116,27 @@ stats = transcribe_directory(
 print(f"Transcribed {stats['processed']} files")
 ```
 
+### Method 4: Analyze stock sentiment from transcriptions
+
+```python
+from stock_sentiment_analyzer import analyze_transcriptions
+
+# Analyze transcribed files and generate stock predictions
+results = analyze_transcriptions(
+    text_files_dir='downloads/text_files',
+    output_dir='downloads/analysis',
+    create_chart=True
+)
+
+# Results are saved to downloads/analysis/stock_predictions.json
+# Chart saved to downloads/analysis/stock_performance_chart.png
+```
+
+Or from command line:
+```bash
+python stock_sentiment_analyzer.py
+```
+
 ## Configuration
 
 - `past_hours`: For live streams, download audio from the past N hours (default: 1)
@@ -146,14 +169,20 @@ print(f"Transcribed {stats['processed']} files")
 downloads/
 ├── audio/                    # Audio files (MP3)
 │   └── {video_title} - {video_id}.mp3
-└── text_files/              # Transcriptions
-    ├── {video_title} - {video_id}_transcribed.txt
-    └── {video_title} - {video_id}_metadata.json
+├── text_files/              # Transcriptions
+│   ├── {video_title} - {video_id}_transcribed.txt
+│   └── {video_title} - {video_id}_metadata.json
+└── analysis/                 # Sentiment analysis results
+    ├── stock_predictions.json
+    └── stock_performance_chart.png
 ```
 
 - **Audio files**: Saved as MP3 format in `downloads/audio/`
 - **Text files**: Transcribed text (translated to English) in `downloads/text_files/`
 - **Metadata files**: JSON files with language detection, segments, etc.
+- **Analysis files**: 
+  - `stock_predictions.json`: Company sentiment scores, predictions, and confidence levels
+  - `stock_performance_chart.png`: Visual chart showing predicted performance
 
 ## Notes
 
@@ -169,4 +198,13 @@ downloads/
   - First run downloads the Whisper model (~74MB for 'base' model)
   - Transcription happens automatically after download (if enabled)
   - Can also transcribe existing audio files separately
+
+- **Stock Sentiment Analysis**:
+  - Analyzes transcribed text to extract company mentions
+  - Performs sentiment analysis on company discussions
+  - Predicts stock performance (Positive/Negative/Neutral)
+  - Generates performance charts (horizontal bar chart)
+  - Stores results in JSON format with confidence scores and sample contexts
+  - Uses lightweight local libraries (TextBlob recommended, or keyword-based fallback)
+  - Automatically downloads NLTK data on first run (TextBlob requirement)
 

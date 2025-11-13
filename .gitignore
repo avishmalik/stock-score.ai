@@ -15,11 +15,15 @@ __pycache__/
 downloads/
 downloads/audio/
 downloads/text_files/
+downloads/analysis/
 *.mp3
 *.m4a
 *.webm
 *.opus
 *.txt
+*.png
+*.json
+!requirements.txt
 
 # IDE
 .vscode/
