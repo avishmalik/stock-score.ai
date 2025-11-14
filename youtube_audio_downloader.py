@@ -338,21 +338,28 @@ def download_from_list(
     past_hours: int = 1,
     output_dir: str = 'downloads',
     auto_transcribe: bool = True,
-    transcription_model: str = 'base'
+    transcription_model: str = 'base',
+    auto_hindi_transcribe: bool = False,
+    auto_hindi_sentiment: bool = True,
+    run_all_sentiment: bool = True
 ) -> dict:
     """
     Download audio from a list of YouTube live streams or stored live videos.
     
     - For live streams: Downloads audio for the past N hours
     - For stored videos (that were live): Downloads the full video audio
-    - Optionally transcribes audio to text (English, Hindi, or mixed)
+    - Optionally transcribes audio to text (English, Hindi, or mixed) - with translation
+    - Optionally runs all sentiment analyzers automatically (including XLM-RoBERTa)
     
     Args:
         video_urls: List of YouTube video URLs (live streams or stored live videos)
         past_hours: For live streams, download audio from past N hours
         output_dir: Directory to save audio files
-        auto_transcribe: If True, automatically transcribe downloaded audio
+        auto_transcribe: If True, automatically transcribe downloaded audio (with translation to English)
         transcription_model: Whisper model size ('tiny', 'base', 'small', 'medium', 'large')
+        auto_hindi_transcribe: If True, transcribe Hindi/Hinglish WITHOUT translation (usually produces garbled text)
+        auto_hindi_sentiment: If True, analyze sentiment using XLM-RoBERTa (uses English translation)
+        run_all_sentiment: If True, run all sentiment analyzers automatically after transcription
     
     Returns:
         Dictionary with download statistics
@@ -391,7 +398,7 @@ def download_from_list(
                 stats['downloaded'] += 1
                 # Auto-transcribe if enabled
                 if auto_transcribe and isinstance(result, str) and os.path.exists(result):
-                    print(f"  🎤 Starting transcription...")
+                    print(f"  🎤 Starting transcription (with translation)...")
                     try:
                         from audio_transcriber import transcribe_audio
                         transcribe_audio(
@@ -402,6 +409,50 @@ def download_from_list(
                         )
                     except Exception as e:
                         print(f"  ⚠ Transcription failed: {e}")
+                
+                # Hindi transcription (WITHOUT translation) for XLM-RoBERTa
+                # This keeps original Hindi/Hinglish text - no translation step
+                if auto_hindi_transcribe:
+                    # Find audio file - it might have been moved to audio/ directory
+                    audio_file = result if isinstance(result, str) and os.path.exists(result) else None
+                    if not audio_file:
+                        # Check if file was moved to audio directory
+                        import glob
+                        audio_dir = os.path.join(output_dir, 'audio')
+                        if os.path.exists(audio_dir):
+                            # Find the most recently modified audio file
+                            audio_files = glob.glob(os.path.join(audio_dir, '*.mp3'))
+                            if audio_files:
+                                audio_file = max(audio_files, key=os.path.getmtime)
+                    
+                    if audio_file and os.path.exists(audio_file):
+                        print(f"  🎤 Starting Hindi transcription (keeping original language, no translation)...")
+                        try:
+                            from hindi_sentiment_analyzer import transcribe_audio_no_translation
+                            hindi_text_file = transcribe_audio_no_translation(
+                                audio_file,
+                                output_dir=os.path.join(output_dir, 'text_files'),
+                                model_size=transcription_model
+                            )
+                            
+                            # Run XLM-RoBERTa sentiment analysis
+                            # Note: Uses English translated text (better quality) since Hindi transcription is garbled
+                            if auto_hindi_sentiment:
+                                print(f"  📊 Analyzing sentiment with XLM-RoBERTa...")
+                                try:
+                                    from hindi_sentiment_analyzer import analyze_hindi_transcriptions
+                                    analyze_hindi_transcriptions(
+                                        text_files_dir=os.path.join(output_dir, 'text_files'),
+                                        output_dir=os.path.join(output_dir, 'analysis'),
+                                        create_chart=True,
+                                        use_translated_text=True  # Use English translation (better quality)
+                                    )
+                                except Exception as e:
+                                    print(f"  ⚠ XLM-RoBERTa sentiment analysis failed: {e}")
+                        except Exception as e:
+                            print(f"  ⚠ Hindi transcription failed: {e}")
+                    else:
+                        print(f"  ⚠ Could not find audio file for Hindi transcription")
             else:
                 stats['failed'] += 1
         
@@ -423,7 +474,7 @@ def download_from_list(
                             audio_file = max(downloaded_files, key=os.path.getmtime)
                     
                     if audio_file and os.path.exists(audio_file):
-                        print(f"  🎤 Starting transcription...")
+                        print(f"  🎤 Starting transcription (with translation)...")
                         try:
                             from audio_transcriber import transcribe_audio
                             transcribe_audio(
@@ -434,6 +485,44 @@ def download_from_list(
                             )
                         except Exception as e:
                             print(f"  ⚠ Transcription failed: {e}")
+                
+                # Hindi transcription (WITHOUT translation) for XLM-RoBERTa
+                # This keeps original Hindi/Hinglish text - no translation step
+                if auto_hindi_transcribe:
+                    audio_file = result if isinstance(result, str) else None
+                    if not audio_file:
+                        # Find the most recently downloaded file
+                        import glob
+                        downloaded_files = glob.glob(os.path.join(output_dir, '*.mp3'))
+                        if downloaded_files:
+                            audio_file = max(downloaded_files, key=os.path.getmtime)
+                    
+                    if audio_file and os.path.exists(audio_file):
+                        print(f"  🎤 Starting Hindi transcription (keeping original language, no translation)...")
+                        try:
+                            from hindi_sentiment_analyzer import transcribe_audio_no_translation
+                            hindi_text_file = transcribe_audio_no_translation(
+                                audio_file,
+                                output_dir=os.path.join(output_dir, 'text_files'),
+                                model_size=transcription_model
+                            )
+                            
+                            # Run XLM-RoBERTa sentiment analysis
+                            # Note: Uses English translated text (better quality) since Hindi transcription is garbled
+                            if auto_hindi_sentiment:
+                                print(f"  📊 Analyzing sentiment with XLM-RoBERTa...")
+                                try:
+                                    from hindi_sentiment_analyzer import analyze_hindi_transcriptions
+                                    analyze_hindi_transcriptions(
+                                        text_files_dir=os.path.join(output_dir, 'text_files'),
+                                        output_dir=os.path.join(output_dir, 'analysis'),
+                                        create_chart=True,
+                                        use_translated_text=True  # Use English translation (better quality)
+                                    )
+                                except Exception as e:
+                                    print(f"  ⚠ XLM-RoBERTa sentiment analysis failed: {e}")
+                        except Exception as e:
+                            print(f"  ⚠ Hindi transcription failed: {e}")
             else:
                 stats['failed'] += 1
         
@@ -457,8 +546,10 @@ def main():
     # Configuration
     PAST_HOURS = 1  # For live streams: download audio from past 1 hour
     OUTPUT_DIR = 'downloads'  # Directory to save audio files
-    AUTO_TRANSCRIBE = True  # Automatically transcribe downloaded audio
+    AUTO_TRANSCRIBE = True  # Automatically transcribe downloaded audio (with translation to English)
     TRANSCRIPTION_MODEL = 'base'  # Whisper model: 'tiny', 'base', 'small', 'medium', 'large'
+    AUTO_HINDI_TRANSCRIBE = False  # Skip Hindi transcription (produces garbled text) - use English translation instead
+    AUTO_HINDI_SENTIMENT = True  # Analyze sentiment using XLM-RoBERTa on English translated text (better quality)
     
     # Check dependencies
     check_dependencies()
@@ -483,7 +574,9 @@ def main():
         past_hours=PAST_HOURS,
         output_dir=OUTPUT_DIR,
         auto_transcribe=AUTO_TRANSCRIBE,
-        transcription_model=TRANSCRIPTION_MODEL
+        transcription_model=TRANSCRIPTION_MODEL,
+        auto_hindi_transcribe=AUTO_HINDI_TRANSCRIBE,
+        auto_hindi_sentiment=AUTO_HINDI_SENTIMENT
     )
     
     # Print summary

@@ -6,4 +6,6 @@ textblob>=0.17.1
 matplotlib>=3.5.0
 transformers>=4.30.0
 vaderSentiment>=3.3.2
+protobuf>=3.20.0
+sentencepiece>=0.1.99
 
