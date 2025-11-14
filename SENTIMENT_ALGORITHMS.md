@@ -1,6 +1,6 @@
 # Sentiment Analysis Algorithms Guide
 
-This project includes **5 different sentiment analysis algorithms** that you can run individually to compare their results.
+This project includes **6 different sentiment analysis algorithms** that you can run individually to compare their results.
 
 ## Available Algorithms
 
@@ -34,6 +34,13 @@ This project includes **5 different sentiment analysis algorithms** that you can
 - **Output**: `sentiment_rulebased_predictions.json`
 - **Best for**: Financial terminology and domain-specific patterns
 
+### 6. FinBERT (`sentiment_analyzer_finbert.py`)
+- **Algorithm**: BERT model fine-tuned on financial news sentiment (ProsusAI)
+- **Dependencies**: `transformers`, `torch` (pip install transformers torch)
+- **Output**: `sentiment_finbert_predictions.json`
+- **Best for**: Finance-specific wording like "margin contraction", "beat estimates", etc. Most accurate for stock price correlation tasks
+- **Note**: First run downloads ~500MB model. Requires internet connection.
+
 ## Installation
 
 ### Required Dependencies (for all algorithms)
@@ -48,6 +55,9 @@ pip install textblob
 
 # For VADER algorithm
 pip install vaderSentiment
+
+# For FinBERT algorithm (recommended for financial text)
+pip install transformers torch
 ```
 
 **Note**: Algorithms 3, 4, and 5 (Keyword, N-gram, Rule-Based) work without any external sentiment libraries.
@@ -71,6 +81,9 @@ python sentiment_analyzer_ngram.py
 
 # Algorithm 5: Rule-Based
 python sentiment_analyzer_rulebased.py
+
+# Algorithm 6: FinBERT (recommended for financial text)
+python sentiment_analyzer_finbert.py
 ```
 
 ### Custom Directories
@@ -94,6 +107,7 @@ All algorithms save their results to `downloads/analysis/`:
 - `sentiment_keyword_predictions.json` - Keyword-based results
 - `sentiment_ngram_predictions.json` - N-gram results
 - `sentiment_rulebased_predictions.json` - Rule-based results
+- `sentiment_finbert_predictions.json` - FinBERT results (most accurate for financial text)
 
 Each JSON file contains:
 - `algorithm`: Algorithm name
@@ -147,10 +161,11 @@ for algo_name, results in [("TextBlob", textblob), ("VADER", vader)]:
 | Keyword | Very Fast | Medium | None | Quick analysis |
 | N-gram | Medium | Medium-High | None | Context understanding |
 | Rule-Based | Medium | Medium-High | None | Financial domain |
+| FinBERT | Slow | Very High | transformers, torch | Financial news (best accuracy) |
 
 ## Tips for Comparison
 
-1. **Run all 5 algorithms** on the same transcribed text files
+1. **Run all 6 algorithms** on the same transcribed text files
 2. **Compare sentiment scores** - do they agree or disagree?
 3. **Check confidence levels** - which algorithm is more confident?
 4. **Review sample contexts** - do the predictions make sense?
