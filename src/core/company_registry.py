@@ -189,16 +189,23 @@ def add_custom_companies(companies: list) -> None:
     COMMON_COMPANIES = ALL_INDIAN_COMPANIES
 
 
-def load_companies_from_file(file_path: str) -> None:
+def load_companies_from_file(file_path: str = None) -> None:
     """
     Load companies from a JSON file.
     Useful for maintaining a separate company list file.
     
     Args:
-        file_path: Path to JSON file with companies list
+        file_path: Path to JSON file with companies list (defaults to config/companies.json)
     """
     import json
+    import os
     global ALL_INDIAN_COMPANIES, COMMON_COMPANIES
+    
+    if file_path is None:
+        # Default to config/companies.json relative to project root
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(os.path.dirname(current_dir))
+        file_path = os.path.join(project_root, 'config', 'companies.json')
     
     try:
         with open(file_path, 'r', encoding='utf-8') as f:

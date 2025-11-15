@@ -9,13 +9,17 @@ import os
 import sys
 from pathlib import Path
 
+# Add project root to path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
 # Import comprehensive analyzer and AI insights generator
 try:
-    from comprehensive_stock_analyzer import run_all_analyzers
-    from ai_insights_generator import generate_ai_insights
+    from src.analysis.comprehensive_analyzer import run_all_analyzers
+    from src.analysis.ai_insights import generate_ai_insights
 except ImportError as e:
     print(f"✗ Error importing modules: {e}")
-    print("  Make sure comprehensive_stock_analyzer.py and ai_insights_generator.py are in the same directory")
+    print("  Make sure src/analysis/comprehensive_analyzer.py and src/analysis/ai_insights.py exist")
     sys.exit(1)
 
 

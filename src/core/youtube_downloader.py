@@ -632,7 +632,7 @@ def download_from_list(
                 if auto_transcribe and isinstance(result, str) and os.path.exists(result):
                     print(f"  🎤 Starting transcription (with translation)...")
                     try:
-                        from audio_transcriber import transcribe_audio
+                        from src.core.audio_transcriber import transcribe_audio
                         transcribe_audio(
                             result,
                             output_dir=os.path.join(output_dir, 'text_files'),
@@ -660,7 +660,7 @@ def download_from_list(
                     if audio_file and os.path.exists(audio_file):
                         print(f"  🎤 Starting Hindi transcription (keeping original language, no translation)...")
                         try:
-                            from hindi_sentiment_analyzer import transcribe_audio_no_translation
+                            from src.analyzers.hindi import transcribe_audio_no_translation
                             hindi_text_file = transcribe_audio_no_translation(
                                 audio_file,
                                 output_dir=os.path.join(output_dir, 'text_files'),
@@ -672,7 +672,7 @@ def download_from_list(
                             if auto_hindi_sentiment:
                                 print(f"  📊 Analyzing sentiment with XLM-RoBERTa...")
                                 try:
-                                    from hindi_sentiment_analyzer import analyze_hindi_transcriptions
+                                    from src.analyzers.hindi import analyze_hindi_transcriptions
                                     analyze_hindi_transcriptions(
                                         text_files_dir=os.path.join(output_dir, 'text_files'),
                                         output_dir=os.path.join(output_dir, 'analysis'),
@@ -713,7 +713,7 @@ def download_from_list(
                     if audio_file and os.path.exists(audio_file):
                         print(f"  🎤 Starting transcription (with translation)...")
                         try:
-                            from audio_transcriber import transcribe_audio
+                            from src.core.audio_transcriber import transcribe_audio
                             transcribe_audio(
                                 audio_file,
                                 output_dir=os.path.join(output_dir, 'text_files'),
@@ -737,7 +737,7 @@ def download_from_list(
                     if audio_file and os.path.exists(audio_file):
                         print(f"  🎤 Starting Hindi transcription (keeping original language, no translation)...")
                         try:
-                            from hindi_sentiment_analyzer import transcribe_audio_no_translation
+                            from src.analyzers.hindi import transcribe_audio_no_translation
                             hindi_text_file = transcribe_audio_no_translation(
                                 audio_file,
                                 output_dir=os.path.join(output_dir, 'text_files'),
@@ -749,7 +749,7 @@ def download_from_list(
                             if auto_hindi_sentiment:
                                 print(f"  📊 Analyzing sentiment with XLM-RoBERTa...")
                                 try:
-                                    from hindi_sentiment_analyzer import analyze_hindi_transcriptions
+                                    from src.analyzers.hindi import analyze_hindi_transcriptions
                                     analyze_hindi_transcriptions(
                                         text_files_dir=os.path.join(output_dir, 'text_files'),
                                         output_dir=os.path.join(output_dir, 'analysis'),
@@ -797,7 +797,7 @@ def main():
         print("1. Edit this script and add URLs to the 'video_urls' list")
         print("2. Or import this module and call download_from_list()")
         print("\nExample:")
-        print("  from youtube_audio_downloader import download_from_list")
+        print("  from src.core.youtube_downloader import download_from_list")
         print("  urls = ['https://www.youtube.com/watch?v=VIDEO_ID']")
         print("  download_from_list(urls, past_hours=1)")
         print("\nNote:")

@@ -7,9 +7,13 @@ import sys
 import os
 from pathlib import Path
 
+# Add project root to path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
 # Import the downloader
-from youtube_audio_downloader import download_from_list
-from run_all_sentiment_analyzers import SENTIMENT_ANALYZERS, run_analyzer
+from src.core.youtube_downloader import download_from_list
+from scripts.run_all_analyzers import SENTIMENT_ANALYZERS, run_analyzer
 
 def main():
     # Video URL

@@ -12,10 +12,22 @@ from pathlib import Path
 from flask import Flask, render_template, request, jsonify
 
 # Import existing modules
-from youtube_audio_downloader import download_from_list
-from run_all_sentiment_analyzers import SENTIMENT_ANALYZERS, run_analyzer
+import sys
+import os
 
-app = Flask(__name__)
+# Add project root to Python path
+current_file = os.path.abspath(__file__)
+src_dir = os.path.dirname(current_file)  # src/web/
+src_parent = os.path.dirname(src_dir)    # src/
+project_root = os.path.dirname(src_parent)  # project root
+sys.path.insert(0, project_root)
+
+from src.core.youtube_downloader import download_from_list
+from scripts.run_all_analyzers import SENTIMENT_ANALYZERS, run_analyzer
+
+# Set template folder relative to project root
+template_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'templates')
+app = Flask(__name__, template_folder=template_dir)
 
 # Global status tracking
 analysis_status = {

@@ -9,22 +9,30 @@ import sys
 import subprocess
 from pathlib import Path
 
-# List of all sentiment analyzers
+# Add project root to path
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
+# List of all sentiment analyzers (updated paths)
 SENTIMENT_ANALYZERS = [
-    ('stock_sentiment_analyzer', 'Base Sentiment Analyzer (TextBlob/VADER)'),
-    ('sentiment_analyzer_textblob', 'TextBlob Algorithm'),
-    ('sentiment_analyzer_vader', 'VADER Algorithm'),
-    ('sentiment_analyzer_keyword', 'Keyword-Based Algorithm'),
-    ('sentiment_analyzer_ngram', 'N-gram Based Algorithm'),
-    ('sentiment_analyzer_rulebased', 'Rule-Based Algorithm'),
-    ('sentiment_analyzer_finbert', 'FinBERT Algorithm'),
-    ('hindi_sentiment_analyzer', 'XLM-RoBERTa Algorithm (Multilingual)'),
+    ('src/analyzers/base', 'Base Sentiment Analyzer (TextBlob/VADER)'),
+    ('src/analyzers/textblob', 'TextBlob Algorithm'),
+    ('src/analyzers/vader', 'VADER Algorithm'),
+    ('src/analyzers/keyword', 'Keyword-Based Algorithm'),
+    ('src/analyzers/ngram', 'N-gram Based Algorithm'),
+    ('src/analyzers/rulebased', 'Rule-Based Algorithm'),
+    ('src/analyzers/finbert', 'FinBERT Algorithm'),
+    ('src/analyzers/hindi', 'XLM-RoBERTa Algorithm (Multilingual)'),
 ]
 
 
 def run_analyzer(analyzer_name: str, text_dir: str, output_dir: str, no_chart: bool = False) -> bool:
     """Run a single sentiment analyzer."""
-    analyzer_path = Path(f'{analyzer_name}.py')
+    # Handle both old format (filename) and new format (path)
+    if '/' in analyzer_name:
+        analyzer_path = Path(project_root) / f'{analyzer_name}.py'
+    else:
+        analyzer_path = Path(project_root) / f'src/analyzers/{analyzer_name.replace("sentiment_analyzer_", "").replace("stock_sentiment_analyzer", "base").replace("hindi_sentiment_analyzer", "hindi")}.py'
     
     if not analyzer_path.exists():
         print(f"✗ Analyzer not found: {analyzer_path}")
@@ -45,8 +53,8 @@ def run_analyzer(analyzer_name: str, text_dir: str, output_dir: str, no_chart: b
         if no_chart:
             cmd.append('--no-chart')
         
-        # Special handling for hindi_sentiment_analyzer
-        if analyzer_name == 'hindi_sentiment_analyzer':
+        # Special handling for hindi analyzer
+        if 'hindi' in analyzer_name.lower():
             cmd.append('--analyze-only')
         
         result = subprocess.run(

@@ -16,52 +16,80 @@ from datetime import datetime
 
 # Import all sentiment analyzers
 try:
-    from stock_sentiment_analyzer import analyze_transcriptions as analyze_base
-except:
-    analyze_base = None
+    from src.analyzers.base import analyze_transcriptions as analyze_base
+except ImportError:
+    try:
+        from analyzers.base import analyze_transcriptions as analyze_base
+    except ImportError:
+        analyze_base = None
 
 try:
-    from sentiment_analyzer_textblob import analyze_transcriptions as analyze_textblob
-except:
-    analyze_textblob = None
+    from src.analyzers.sentiment_analyzer_textblob import analyze_transcriptions as analyze_textblob
+except ImportError:
+    try:
+        from analyzers.sentiment_analyzer_textblob import analyze_transcriptions as analyze_textblob
+    except ImportError:
+        analyze_textblob = None
 
 try:
-    from sentiment_analyzer_vader import analyze_transcriptions as analyze_vader
-except:
-    analyze_vader = None
+    from src.analyzers.sentiment_analyzer_vader import analyze_transcriptions as analyze_vader
+except ImportError:
+    try:
+        from analyzers.sentiment_analyzer_vader import analyze_transcriptions as analyze_vader
+    except ImportError:
+        analyze_vader = None
 
 try:
-    from sentiment_analyzer_keyword import analyze_transcriptions as analyze_keyword
-except:
-    analyze_keyword = None
+    from src.analyzers.sentiment_analyzer_keyword import analyze_transcriptions as analyze_keyword
+except ImportError:
+    try:
+        from analyzers.sentiment_analyzer_keyword import analyze_transcriptions as analyze_keyword
+    except ImportError:
+        analyze_keyword = None
 
 try:
-    from sentiment_analyzer_ngram import analyze_transcriptions as analyze_ngram
-except:
-    analyze_ngram = None
+    from src.analyzers.sentiment_analyzer_ngram import analyze_transcriptions as analyze_ngram
+except ImportError:
+    try:
+        from analyzers.sentiment_analyzer_ngram import analyze_transcriptions as analyze_ngram
+    except ImportError:
+        analyze_ngram = None
 
 try:
-    from sentiment_analyzer_rulebased import analyze_transcriptions as analyze_rulebased
-except:
-    analyze_rulebased = None
+    from src.analyzers.sentiment_analyzer_rulebased import analyze_transcriptions as analyze_rulebased
+except ImportError:
+    try:
+        from analyzers.sentiment_analyzer_rulebased import analyze_transcriptions as analyze_rulebased
+    except ImportError:
+        analyze_rulebased = None
 
 try:
-    from sentiment_analyzer_finbert import analyze_transcriptions as analyze_finbert
-except:
-    analyze_finbert = None
+    from src.analyzers.sentiment_analyzer_finbert import analyze_transcriptions as analyze_finbert
+except ImportError:
+    try:
+        from analyzers.sentiment_analyzer_finbert import analyze_transcriptions as analyze_finbert
+    except ImportError:
+        analyze_finbert = None
 
 try:
-    from hindi_sentiment_analyzer import analyze_hindi_transcriptions as analyze_hindi
-except:
-    analyze_hindi = None
+    from src.analyzers.hindi import analyze_hindi_transcriptions as analyze_hindi
+except ImportError:
+    try:
+        from analyzers.hindi import analyze_hindi_transcriptions as analyze_hindi
+    except ImportError:
+        analyze_hindi = None
 
 # Import centralized company registry
 try:
-    from company_registry import ALL_INDIAN_COMPANIES
+    from src.core.company_registry import ALL_INDIAN_COMPANIES
     ENHANCED_COMPANIES = ALL_INDIAN_COMPANIES
 except ImportError:
-    # Fallback to basic list if registry not available
-    ENHANCED_COMPANIES = {
+    try:
+        from core.company_registry import ALL_INDIAN_COMPANIES
+        ENHANCED_COMPANIES = ALL_INDIAN_COMPANIES
+    except ImportError:
+        # Fallback to basic list if registry not available
+        ENHANCED_COMPANIES = {
         'reliance', 'tcs', 'infosys', 'hdfc', 'icici', 'sbi', 'bharti', 'lt', 'hcl', 'wipro',
         'maruti', 'tata', 'adani', 'jsw', 'vedanta', 'hindalco', 'tata motors', 'm&m', 'mm', 'mahindra',
         'dlf', 'grasim', 'ultratech', 'ambuja', 'shree cement', 'dabur', 'hul', 'itc',

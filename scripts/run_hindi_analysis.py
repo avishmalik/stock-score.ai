@@ -3,7 +3,12 @@
 Quick script to run Hindi transcription and XLM-RoBERTa analysis on existing audio.
 """
 
-from hindi_sentiment_analyzer import process_audio_and_analyze
+import sys
+import os
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
+from src.analyzers.hindi import process_audio_and_analyze
 from pathlib import Path
 import glob
 
