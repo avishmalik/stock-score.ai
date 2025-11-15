@@ -28,11 +28,40 @@ SENTIMENT_ANALYZERS = [
 
 def run_analyzer(analyzer_name: str, text_dir: str, output_dir: str, no_chart: bool = False) -> bool:
     """Run a single sentiment analyzer."""
-    # Handle both old format (filename) and new format (path)
-    if '/' in analyzer_name:
+    # Map analyzer names to actual file names
+    analyzer_map = {
+        'src/analyzers/base': 'src/analyzers/base.py',
+        'src/analyzers/textblob': 'src/analyzers/sentiment_analyzer_textblob.py',
+        'src/analyzers/vader': 'src/analyzers/sentiment_analyzer_vader.py',
+        'src/analyzers/keyword': 'src/analyzers/sentiment_analyzer_keyword.py',
+        'src/analyzers/ngram': 'src/analyzers/sentiment_analyzer_ngram.py',
+        'src/analyzers/rulebased': 'src/analyzers/sentiment_analyzer_rulebased.py',
+        'src/analyzers/finbert': 'src/analyzers/sentiment_analyzer_finbert.py',
+        'src/analyzers/hindi': 'src/analyzers/hindi.py',
+    }
+    
+    # Get the correct file path
+    if analyzer_name in analyzer_map:
+        analyzer_path = Path(project_root) / analyzer_map[analyzer_name]
+    elif '/' in analyzer_name:
+        # If it's already a path, use it directly
         analyzer_path = Path(project_root) / f'{analyzer_name}.py'
     else:
-        analyzer_path = Path(project_root) / f'src/analyzers/{analyzer_name.replace("sentiment_analyzer_", "").replace("stock_sentiment_analyzer", "base").replace("hindi_sentiment_analyzer", "hindi")}.py'
+        # Legacy format - try to map
+        name_mapping = {
+            'stock_sentiment_analyzer': 'src/analyzers/base.py',
+            'sentiment_analyzer_textblob': 'src/analyzers/sentiment_analyzer_textblob.py',
+            'sentiment_analyzer_vader': 'src/analyzers/sentiment_analyzer_vader.py',
+            'sentiment_analyzer_keyword': 'src/analyzers/sentiment_analyzer_keyword.py',
+            'sentiment_analyzer_ngram': 'src/analyzers/sentiment_analyzer_ngram.py',
+            'sentiment_analyzer_rulebased': 'src/analyzers/sentiment_analyzer_rulebased.py',
+            'sentiment_analyzer_finbert': 'src/analyzers/sentiment_analyzer_finbert.py',
+            'hindi_sentiment_analyzer': 'src/analyzers/hindi.py',
+        }
+        if analyzer_name in name_mapping:
+            analyzer_path = Path(project_root) / name_mapping[analyzer_name]
+        else:
+            analyzer_path = Path(project_root) / f'src/analyzers/{analyzer_name}.py'
     
     if not analyzer_path.exists():
         print(f"✗ Analyzer not found: {analyzer_path}")
