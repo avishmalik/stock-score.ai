@@ -237,9 +237,27 @@ def get_sorted_companies() -> list:
 
 
 # Common words to exclude from matching (to avoid false positives)
+# These are short abbreviations that commonly appear as parts of English words
 COMMON_WORDS_TO_EXCLUDE = {
     'fact', 'idea', 'act', 'art', 'it', 'is', 'as', 'at', 'an', 'am', 'if', 'in', 'on', 'or',
-    'be', 'by', 'do', 'go', 'he', 'me', 'my', 'no', 'of', 'so', 'to', 'up', 'we', 'us'
+    'be', 'by', 'do', 'go', 'he', 'me', 'my', 'no', 'of', 'so', 'to', 'up', 'we', 'us',
+    'acc',  # matches "according", "account", etc.
+    'bel',  # matches "believe", "below", etc.
+    'upl',  # matches "uplift", "upload", etc. (but UPL is a real company, so need context check)
+}
+
+# Financial context keywords that indicate a real company mention
+FINANCIAL_CONTEXT_KEYWORDS = {
+    'stock', 'stocks', 'share', 'shares', 'company', 'companies', 'firm', 'firms',
+    'bank', 'banks', 'banking', 'financial', 'finance', 'trading', 'trade', 'market', 'markets',
+    'revenue', 'profit', 'loss', 'earnings', 'quarter', 'results', 'guidance', 'upgrade', 'downgrade',
+    'price', 'prices', 'target', 'buy', 'sell', 'hold', 'rating', 'analyst', 'analysts',
+    'ipo', 'listing', 'dividend', 'split', 'merger', 'acquisition', 'deal', 'contract',
+    'growth', 'decline', 'rise', 'fall', 'surge', 'plunge', 'rally', 'crash',
+    'nifty', 'sensex', 'index', 'indices', 'bse', 'nse', 'exchange',
+    'crore', 'lakh', 'rupees', 'rs', 'percent', '%', 'basis points', 'bps',
+    'q1', 'q2', 'q3', 'q4', 'fy', 'year', 'quarterly', 'annual',
+    'ceo', 'md', 'chairman', 'management', 'board', 'director',
 }
 
 def create_company_aliases() -> dict:
@@ -325,7 +343,111 @@ def create_company_aliases() -> dict:
     return aliases
 
 
-def find_company_mentions(text: str) -> dict:
+def validate_company_match(company: str, sentence: str, sentence_lower: str) -> tuple[bool, float, bool]:
+    """
+    Validate if a company match is likely correct or a false positive.
+    Returns (is_valid, confidence_score, likely_false_positive) where:
+    - is_valid: whether to include this match
+    - confidence_score: 0.0 to 1.0 indicating match quality
+    - likely_false_positive: True if this is likely a false positive (e.g., "acc" in "according")
+    
+    Checks:
+    1. If company is a common word that appears in non-financial contexts
+    2. If the sentence contains financial context keywords
+    3. If the match appears as part of a larger word (likely false positive)
+    """
+    company_lower = company.lower()
+    confidence = 1.0
+    likely_false_positive = False
+    
+    # Check if company name is too short and appears as part of common words
+    if len(company_lower) <= 3:
+        # Check if it appears as part of a larger word
+        words_in_sentence = re.findall(r'\b\w+\b', sentence_lower)
+        for word in words_in_sentence:
+            if company_lower in word and word != company_lower:
+                # It's part of a larger word - check if it's a common word
+                common_prefixes = {
+                    'acc': ['according', 'account', 'accepted', 'access', 'accent', 'accuser', 'accessing'],
+                    'bel': ['believe', 'below', 'belong', 'bell', 'belongs', 'believed'],
+                    'upl': ['uplift', 'upload', 'upland'],
+                    'fact': ['factory', 'factor', 'factual', 'fact', 'factors'],
+                    'idea': ['ideal', 'ideally', 'ideas', 'ideals'],
+                }
+                if company_lower in common_prefixes:
+                    for common_word in common_prefixes[company_lower]:
+                        # Check if word starts with the company name
+                        if word.startswith(company_lower):
+                            # Check if the next few chars match a common word pattern
+                            if len(word) > len(company_lower):
+                                next_chars = word[len(company_lower):len(company_lower)+3]
+                                # If it matches common word patterns, likely false positive
+                                if any(common_word.startswith(company_lower + next_chars[:min(2, len(next_chars))]) 
+                                       for common_word in common_prefixes[company_lower]):
+                                    # Likely false positive - mark it
+                                    likely_false_positive = True
+                                    confidence = 0.1
+                                    break
+                    if likely_false_positive:
+                        break
+    
+    # Boost confidence if financial context keywords are present
+    financial_context_count = sum(1 for keyword in FINANCIAL_CONTEXT_KEYWORDS if keyword in sentence_lower)
+    if financial_context_count > 0:
+        # Increase confidence based on number of financial keywords
+        confidence = min(1.0, confidence + (financial_context_count * 0.15))
+        # If we have financial context, it's less likely to be a false positive
+        if financial_context_count >= 2:
+            likely_false_positive = False
+    elif len(company_lower) <= 3:
+        # Short abbreviation without financial context - lower confidence
+        confidence = max(0.2, confidence - 0.3)
+        if not likely_false_positive:
+            # Mark as suspicious if no financial context
+            likely_false_positive = True
+    
+    # Check if company name appears as standalone word (higher confidence)
+    standalone_pattern = r'\b' + re.escape(company_lower) + r'\b'
+    is_standalone = re.search(standalone_pattern, sentence_lower)
+    
+    # Special handling for common words that appear standalone in non-financial contexts
+    if is_standalone and len(company_lower) <= 4:
+        # Check for common non-financial phrases
+        non_financial_phrases = {
+            'fact': ['in fact', 'the fact', 'fact is', 'fact that', 'as a matter of fact', 'well in fact'],
+            'idea': ['have an idea', 'the idea', 'idea is', 'idea that', 'no idea', 'good idea', 'ideas', 'new ideas', 'bottom of ideas'],
+        }
+        if company_lower in non_financial_phrases:
+            for phrase in non_financial_phrases[company_lower]:
+                if phrase in sentence_lower:
+                    # Likely false positive - common phrase usage
+                    likely_false_positive = True
+                    confidence = 0.2
+                    break
+    
+    if is_standalone:
+        confidence = min(1.0, confidence + 0.2)
+        # Standalone word is less likely to be false positive (unless it's a common phrase)
+        if confidence > 0.5 and not likely_false_positive:
+            likely_false_positive = False
+    
+    # Special cases: if company is in registry and has financial context, trust it more
+    if company_lower in COMMON_COMPANIES and financial_context_count > 0:
+        confidence = max(confidence, 0.6)
+        # Override false positive flag if we have strong financial context
+        if financial_context_count >= 2:
+            likely_false_positive = False
+    
+    # If marked as likely false positive, require higher confidence threshold
+    if likely_false_positive:
+        is_valid = confidence >= 0.5  # Higher threshold for suspicious matches
+    else:
+        is_valid = confidence >= 0.4  # Normal threshold
+    
+    return is_valid, confidence, likely_false_positive
+
+
+def find_company_mentions(text: str, min_confidence: float = 0.4) -> dict:
     """
     Find all company mentions in text using flexible matching.
     Returns dict mapping company names to list of sentences where they appear.
@@ -449,8 +571,16 @@ def find_company_mentions(text: str) -> dict:
                                 matched = True
             
             if matched:
-                company_mentions[company].append(sentence_clean)
-                found_companies.add(sentence_key)
+                # Validate the match to filter out false positives
+                is_valid, match_confidence, is_false_positive = validate_company_match(company, sentence_clean, sentence_lower)
+                if is_valid:
+                    # Store with metadata for later filtering
+                    company_mentions[company].append({
+                        'sentence': sentence_clean,
+                        'confidence': match_confidence,
+                        'likely_false_positive': is_false_positive
+                    })
+                    found_companies.add(sentence_key)
     
     # Deduplicate: if both "asian paints" and "asianpaint" are found, keep only one
     # Prefer the form that exists in COMMON_COMPANIES
@@ -489,7 +619,25 @@ def find_company_mentions(text: str) -> dict:
                                 deduplicated[prev_company] = list(set(deduplicated[prev_company]))
                             break
     
-    return deduplicated
+    # Convert back to simple format (list of sentences) but keep metadata available
+    # For backward compatibility, return simple dict, but analyzers can access metadata
+    final_result = {}
+    for company, items in deduplicated.items():
+        if isinstance(items[0], dict):
+            # New format with metadata
+            final_result[company] = [item['sentence'] for item in items]
+            # Store metadata separately for analyzers to use
+            final_result[f'__meta_{company}'] = {
+                'confidences': [item['confidence'] for item in items],
+                'false_positives': [item['likely_false_positive'] for item in items],
+                'avg_confidence': sum(item['confidence'] for item in items) / len(items),
+                'has_false_positive': any(item['likely_false_positive'] for item in items)
+            }
+        else:
+            # Old format (strings)
+            final_result[company] = items
+    
+    return final_result
 
 
 # Auto-load companies from registry file on import

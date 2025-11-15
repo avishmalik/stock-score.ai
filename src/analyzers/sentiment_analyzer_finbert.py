@@ -283,16 +283,36 @@ def analyze_transcriptions(
             continue
         
         print(f"Analyzing (FinBERT): {Path(text_file).name}")
-        company_mentions = extract_company_mentions(text)
+        company_mentions_raw = extract_company_mentions(text)
         
-        if not company_mentions:
+        if not company_mentions_raw:
             continue
+        
+        # Extract metadata and filter out metadata keys
+        company_mentions = {}
+        company_metadata = {}
+        for key, value in company_mentions_raw.items():
+            if key.startswith('__meta_'):
+                company_name = key.replace('__meta_', '')
+                company_metadata[company_name] = value
+            else:
+                company_mentions[key] = value
         
         print(f"  Found {len(company_mentions)} companies mentioned")
         
         results = []
         for company, contexts in company_mentions.items():
             analysis = analyze_company_sentiment(company, contexts, pipeline_obj)
+            
+            # Add false positive flag if metadata available
+            if company in company_metadata:
+                meta = company_metadata[company]
+                analysis['likely_false_positive'] = meta.get('has_false_positive', False)
+                analysis['match_confidence'] = round(meta.get('avg_confidence', 1.0), 3)
+            else:
+                analysis['likely_false_positive'] = False
+                analysis['match_confidence'] = 1.0
+            
             results.append(analysis)
         
         results.sort(key=lambda x: x['confidence'], reverse=True)
