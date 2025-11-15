@@ -98,126 +98,83 @@ def was_live_stream(video_info: dict) -> bool:
     return live_status in ('was_live', 'post_live')
 
 
-def download_live_stream_audio(url: str, past_hours: int, output_dir: str = 'downloads') -> bool:
+def download_live_stream_audio(url: str, past_hours: int, output_dir: str = 'downloads') -> Optional[str]:
     """
-    Download audio from a live stream for the past N hours.
-    Downloads available stream and trims to keep only the last N hours.
+    Download audio from a live stream for the past N hours using stream URL + ffmpeg.
+    Uses yt-dlp to get the direct stream URL, then ffmpeg to download only the last N hours.
     
     Args:
         url: YouTube live stream URL
-        past_hours: Number of hours to keep from the past
+        past_hours: Number of hours to download (from "now" going forward)
         output_dir: Directory to save audio files
     
     Returns:
-        True if successful, False otherwise
+        Path to downloaded file if successful, False otherwise
+    
+    Note: For live streams, this downloads the NEXT N hours from "now", not the past.
+    For past hour, DVR must be enabled on the stream.
     """
     os.makedirs(output_dir, exist_ok=True)
     
-    # Use a temporary file for initial download
-    temp_dir = tempfile.mkdtemp()
-    temp_output = os.path.join(temp_dir, 'temp_%(title)s - %(id)s.%(ext)s')
-    
     try:
-        print(f"Downloading live stream audio (will keep past {past_hours} hour(s)) from: {url}")
+        print(f"Downloading live stream audio (next {past_hours} hour(s)) from: {url}")
         
-        # Download the live stream (yt-dlp handles live streams)
-        # Add options to bypass 403 errors - try different player clients
+        # Get video info for title
+        video_info = get_video_info(url)
+        video_title = video_info.get('title', 'Unknown') if video_info else 'Unknown'
+        
+        # Get stream URL using yt-dlp -g
         player_clients = ['web', 'android', 'ios', 'tv_embedded']
-        download_success = False
+        stream_url = None
         
         for client in player_clients:
             try:
-                cmd_download = [
+                cmd_get_url = [
                     'yt-dlp',
-                    '--extract-audio',
-                    '--audio-format', 'mp3',
-                    '--audio-quality', '0',
-                    '--no-playlist',
-                    '--no-warnings',
-                    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                    '--referer', 'https://www.youtube.com/',
-                    '--retries', '2',
-                    '--fragment-retries', '2',
+                    '-f', 'best[ext=mp4]/best',
+                    '-g',
                     '--extractor-args', f'youtube:player_client={client}',
-                    '--output', temp_output,
                     url
                 ]
-                result = subprocess.run(cmd_download, check=True, capture_output=True, text=True, timeout=300)
-                download_success = True
-                break
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                result = subprocess.run(cmd_get_url, check=True, capture_output=True, text=True, timeout=30)
+                stream_url = result.stdout.strip().split('\n')[0]
+                if stream_url and stream_url.startswith('http'):
+                    print(f"  Got stream URL (using {client} client)")
+                    break
+            except:
                 continue
         
-        if not download_success:
-            # Fallback: try without extractor args
-            cmd_download = [
-                'yt-dlp',
-                '--extract-audio',
-                '--audio-format', 'mp3',
-                '--audio-quality', '0',
-                '--no-playlist',
-                '--no-warnings',
-                '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                '--referer', 'https://www.youtube.com/',
-                '--retries', '3',
-                '--fragment-retries', '3',
-                '--output', temp_output,
-                url
-            ]
-            result = subprocess.run(cmd_download, check=True, capture_output=True, text=True)
-        
-        # Find the downloaded file
-        downloaded_files = glob.glob(os.path.join(temp_dir, '*.mp3'))
-        if not downloaded_files:
-            print(f"✗ No audio file found after download\n")
+        if not stream_url:
+            print(f"✗ Could not get stream URL for live stream\n")
             return False
         
-        temp_file = downloaded_files[0]
+        # Use ffmpeg to download and extract audio (limit to past_hours)
+        target_seconds = past_hours * 3600
+        video_id = video_info.get('id', 'live') if video_info else 'live'
+        final_output = os.path.join(output_dir, f'{video_title} - {video_id}.mp3')
         
-        # Get file duration using ffprobe
-        cmd_probe = [
-            'ffprobe',
-            '-v', 'error',
-            '-show_entries', 'format=duration',
-            '-of', 'default=noprint_wrappers=1:nokey=1',
-            temp_file
+        # For live streams, use -t to limit duration (downloads next N hours from "now")
+        cmd_ffmpeg = [
+            'ffmpeg',
+            '-i', stream_url,
+            '-t', str(target_seconds),  # Limit to N hours
+            '-vn',  # No video
+            '-acodec', 'libmp3lame',
+            '-ab', '192k',
+            '-y',
+            final_output
         ]
         
-        probe_result = subprocess.run(cmd_probe, capture_output=True, text=True, check=True)
-        duration_seconds = float(probe_result.stdout.strip())
-        target_seconds = past_hours * 3600
+        print(f"  Downloading audio using ffmpeg (will download next {past_hours} hour(s))...")
+        subprocess.run(cmd_ffmpeg, check=True, capture_output=True)
         
-        # Final output filename
-        base_name = os.path.basename(temp_file)
-        final_output = os.path.join(output_dir, base_name)
-        
-        # If duration is longer than target, trim to keep only the last N hours
-        if duration_seconds > target_seconds:
-            start_time = duration_seconds - target_seconds
-            print(f"  Trimming: keeping last {past_hours} hour(s) (from {start_time:.0f}s to end)")
-            
-            cmd_trim = [
-                'ffmpeg',
-                '-i', temp_file,
-                '-ss', str(start_time),
-                '-c', 'copy',
-                '-y',  # Overwrite output file
-                final_output
-            ]
-            
-            subprocess.run(cmd_trim, check=True, capture_output=True)
+        if os.path.exists(final_output):
+            print(f"✓ Successfully downloaded live stream audio (next {past_hours} hour(s)) from: {url}\n")
+            return final_output
         else:
-            # Duration is shorter than target, just copy the file
-            print(f"  Stream duration ({duration_seconds/3600:.2f}h) is shorter than requested ({past_hours}h), keeping full stream")
-            shutil.copy2(temp_file, final_output)
-        
-        # Clean up temp file
-        os.remove(temp_file)
-        os.rmdir(temp_dir)
-        
-        print(f"✓ Successfully downloaded live stream audio (past {past_hours} hour(s)) from: {url}\n")
-        return final_output
-        
+            print(f"✗ ffmpeg download failed - output file not found\n")
+            return False
+            
     except subprocess.CalledProcessError as e:
         error_msg = e.stderr if e.stderr else (e.stdout if e.stdout else 'Unknown error')
         print(f"✗ Failed to download live stream {url}")
@@ -229,16 +186,290 @@ def download_live_stream_audio(url: str, past_hours: int, output_dir: str = 'dow
             else:
                 print(f"  Error: {error_msg}")
         print()
-        # Clean up temp files
-        try:
-            for f in glob.glob(os.path.join(temp_dir, '*')):
-                os.remove(f)
-            os.rmdir(temp_dir)
-        except:
-            pass
         return False
     except Exception as e:
         print(f"✗ Error processing live stream {url}: {str(e)}\n")
+        return False
+
+
+def download_stored_video_past_hour(url: str, past_hours: int, output_dir: str = 'downloads') -> Optional[str]:
+    """
+    Download the past N hours of audio from a stored live stream video using stream URL + ffmpeg.
+    Uses yt-dlp to get the stream URL, then ffmpeg to download only the last N hours.
+    
+    Args:
+        url: YouTube video URL (that was a live stream)
+        past_hours: Number of hours to download from the end
+        output_dir: Directory to save audio files
+    
+    Returns:
+        Path to downloaded file if successful, False otherwise
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    
+    try:
+        # Get video info to calculate duration
+        video_info = get_video_info(url)
+        if not video_info:
+            print(f"✗ Failed to get video info for {url}\n")
+            return False
+        
+        duration = video_info.get('duration')
+        if not duration:
+            print(f"✗ Could not determine video duration for {url}\n")
+            return False
+        
+        video_title = video_info.get('title', 'Unknown')
+        print(f"  Video duration: {duration/3600:.2f} hours")
+        
+        # Calculate start time (from end)
+        target_seconds = past_hours * 3600
+        if duration <= target_seconds:
+            print(f"  Video duration ({duration/3600:.2f}h) is shorter than requested ({past_hours}h), downloading full video")
+            start_time = 0
+        else:
+            start_time = duration - target_seconds
+            print(f"  Will download only last {past_hours} hour(s) (from {start_time:.0f}s to end)")
+        
+        # Try method 1: Use --download-sections (works for stored videos)
+        try:
+            temp_dir = tempfile.mkdtemp()
+            temp_output = os.path.join(temp_dir, 'temp_%(title)s - %(id)s.%(ext)s')
+            
+            # Format time for --download-sections: "START-END" where times are in HH:MM:SS or seconds
+            if start_time > 0:
+                # Convert seconds to HH:MM:SS format for better compatibility
+                start_hours = int(start_time // 3600)
+                start_mins = int((start_time % 3600) // 60)
+                start_secs = int(start_time % 60)
+                end_hours = int(duration // 3600)
+                end_mins = int((duration % 3600) // 60)
+                end_secs = int(duration % 60)
+                section_spec = f"{start_hours:02d}:{start_mins:02d}:{start_secs:02d}-{end_hours:02d}:{end_mins:02d}:{end_secs:02d}"
+            else:
+                # Download full video
+                section_spec = None
+            
+            player_clients = ['web', 'android', 'ios', 'tv_embedded']
+            download_success = False
+            last_error = None
+            
+            for client in player_clients:
+                try:
+                    cmd = [
+                        'yt-dlp',
+                        '--extract-audio',
+                        '--audio-format', 'mp3',
+                        '--audio-quality', '0',
+                        '--no-playlist',
+                        '--no-warnings',
+                        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        '--referer', 'https://www.youtube.com/',
+                        '--retries', '2',
+                        '--fragment-retries', '2',
+                        '--extractor-args', f'youtube:player_client={client}',
+                        '--output', temp_output,
+                    ]
+                    
+                    if section_spec:
+                        cmd.extend(['--download-sections', section_spec])
+                    
+                    cmd.append(url)
+                    
+                    print(f"  Downloading using --download-sections (trying {client} client)...")
+                    result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600)
+                    download_success = True
+                    break
+                except subprocess.CalledProcessError as e:
+                    last_error = e.stderr if e.stderr else e.stdout
+                    continue
+                except subprocess.TimeoutExpired:
+                    last_error = "Timeout"
+                    continue
+            
+            if download_success:
+                # Find the downloaded file - check for mp3, m4a, webm, opus, etc.
+                downloaded_files = []
+                for ext in ['*.mp3', '*.m4a', '*.webm', '*.opus', '*.ogg', '*.*']:
+                    files = glob.glob(os.path.join(temp_dir, ext))
+                    downloaded_files.extend(files)
+                    if downloaded_files:
+                        break
+                
+                # Also check all files in temp_dir
+                if not downloaded_files:
+                    all_files = [f for f in os.listdir(temp_dir) if os.path.isfile(os.path.join(temp_dir, f))]
+                    downloaded_files = [os.path.join(temp_dir, f) for f in all_files if not f.startswith('.')]
+                
+                if downloaded_files:
+                    temp_file = downloaded_files[0]
+                    # If it's not mp3, we might need to convert it
+                    if not temp_file.endswith('.mp3'):
+                        # Convert to mp3 using ffmpeg
+                        base_name = os.path.basename(temp_file)
+                        mp3_name = os.path.splitext(base_name)[0] + '.mp3'
+                        mp3_temp = os.path.join(temp_dir, mp3_name)
+                        cmd_convert = [
+                            'ffmpeg',
+                            '-i', temp_file,
+                            '-vn',
+                            '-acodec', 'libmp3lame',
+                            '-ab', '192k',
+                            '-y',
+                            mp3_temp
+                        ]
+                        try:
+                            subprocess.run(cmd_convert, check=True, capture_output=True)
+                            os.remove(temp_file)
+                            temp_file = mp3_temp
+                        except:
+                            pass
+                    
+                    base_name = os.path.basename(temp_file)
+                    final_output = os.path.join(output_dir, base_name)
+                    shutil.copy2(temp_file, final_output)
+                    os.remove(temp_file)
+                    os.rmdir(temp_dir)
+                    print(f"✓ Successfully downloaded past {past_hours} hour(s) from stored video: {url}\n")
+                    return final_output
+                else:
+                    # Debug: list what's actually in the temp directory
+                    try:
+                        files_in_dir = os.listdir(temp_dir)
+                        print(f"  ⚠ --download-sections completed but no file found. Files in temp dir: {files_in_dir}")
+                    except:
+                        print(f"  ⚠ --download-sections completed but no file found")
+            else:
+                if last_error:
+                    error_lines = last_error.strip().split('\n')
+                    if len(error_lines) > 2:
+                        print(f"  ⚠ --download-sections failed: ...{error_lines[-1]}")
+                    else:
+                        print(f"  ⚠ --download-sections failed")
+            
+            # Clean up temp files
+            try:
+                for f in glob.glob(os.path.join(temp_dir, '*')):
+                    os.remove(f)
+                os.rmdir(temp_dir)
+            except:
+                pass
+        except Exception as e:
+            print(f"  ⚠ --download-sections method failed: {e}")
+        
+        # Method 2: Fallback - Download full video then trim with ffmpeg (most reliable for stored videos)
+        print(f"  Trying download-then-trim method (downloads full video, then trims to last {past_hours} hour(s))...")
+        try:
+            temp_dir = tempfile.mkdtemp()
+            temp_output = os.path.join(temp_dir, 'temp_%(title)s - %(id)s.%(ext)s')
+            
+            player_clients = ['web', 'android', 'ios', 'tv_embedded']
+            download_success = False
+            
+            for client in player_clients:
+                try:
+                    cmd = [
+                        'yt-dlp',
+                        '--extract-audio',
+                        '--audio-format', 'mp3',
+                        '--audio-quality', '0',
+                        '--no-playlist',
+                        '--no-warnings',
+                        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                        '--referer', 'https://www.youtube.com/',
+                        '--retries', '2',
+                        '--fragment-retries', '2',
+                        '--extractor-args', f'youtube:player_client={client}',
+                        '--output', temp_output,
+                        url
+                    ]
+                    
+                    print(f"  Downloading full video (will trim to last {past_hours} hour(s) afterwards)...")
+                    result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=600)
+                    download_success = True
+                    break
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                    continue
+            
+            if download_success:
+                # Find the downloaded file
+                downloaded_files = glob.glob(os.path.join(temp_dir, '*.mp3'))
+                if downloaded_files:
+                    temp_file = downloaded_files[0]
+                    
+                    # Get file duration using ffprobe
+                    cmd_probe = [
+                        'ffprobe',
+                        '-v', 'error',
+                        '-show_entries', 'format=duration',
+                        '-of', 'default=noprint_wrappers=1:nokey=1',
+                        temp_file
+                    ]
+                    
+                    try:
+                        probe_result = subprocess.run(cmd_probe, capture_output=True, text=True, check=True)
+                        file_duration = float(probe_result.stdout.strip())
+                        
+                        # Calculate trim start time
+                        if file_duration > target_seconds:
+                            trim_start = file_duration - target_seconds
+                            
+                            base_name = os.path.basename(temp_file)
+                            final_output = os.path.join(output_dir, base_name)
+                            
+                            # Trim the file
+                            cmd_trim = [
+                                'ffmpeg',
+                                '-i', temp_file,
+                                '-ss', str(trim_start),
+                                '-c', 'copy',
+                                '-y',
+                                final_output
+                            ]
+                            
+                            print(f"  Trimming: keeping last {past_hours} hour(s) (from {trim_start:.0f}s to end)")
+                            subprocess.run(cmd_trim, check=True, capture_output=True)
+                            
+                            # Clean up temp file
+                            os.remove(temp_file)
+                            os.rmdir(temp_dir)
+                            
+                            if os.path.exists(final_output):
+                                print(f"✓ Successfully downloaded past {past_hours} hour(s) from stored video: {url}\n")
+                                return final_output
+                        else:
+                            # File is shorter than requested, just copy it
+                            base_name = os.path.basename(temp_file)
+                            final_output = os.path.join(output_dir, base_name)
+                            shutil.copy2(temp_file, final_output)
+                            os.remove(temp_file)
+                            os.rmdir(temp_dir)
+                            print(f"✓ Video duration ({file_duration/3600:.2f}h) is shorter than requested ({past_hours}h), downloaded full video\n")
+                            return final_output
+                    except Exception as e:
+                        print(f"  ⚠ Error trimming file: {e}")
+                        # Fallback: just copy the file
+                        base_name = os.path.basename(temp_file)
+                        final_output = os.path.join(output_dir, base_name)
+                        shutil.copy2(temp_file, final_output)
+                        os.remove(temp_file)
+                        os.rmdir(temp_dir)
+                        return final_output
+            
+            # Clean up temp files
+            try:
+                for f in glob.glob(os.path.join(temp_dir, '*')):
+                    os.remove(f)
+                os.rmdir(temp_dir)
+            except:
+                pass
+                
+        except Exception as e:
+            print(f"  ✗ Download-then-trim method failed: {str(e)}\n")
+            return False
+            
+    except Exception as e:
+        print(f"✗ Error downloading past hour from {url}: {str(e)}\n")
         return False
 
 
@@ -346,14 +577,14 @@ def download_from_list(
     """
     Download audio from a list of YouTube live streams or stored live videos.
     
-    - For live streams: Downloads audio for the past N hours
-    - For stored videos (that were live): Downloads the full video audio
+    - For live streams: Downloads audio for the next N hours (from "now")
+    - For stored videos (that were live): Downloads the past N hours from the end of the video
     - Optionally transcribes audio to text (English, Hindi, or mixed) - with translation
     - Optionally runs all sentiment analyzers automatically (including XLM-RoBERTa)
     
     Args:
         video_urls: List of YouTube video URLs (live streams or stored live videos)
-        past_hours: For live streams, download audio from past N hours
+        past_hours: Number of hours to download (for live: next N hours, for stored: past N hours)
         output_dir: Directory to save audio files
         auto_transcribe: If True, automatically transcribe downloaded audio (with translation to English)
         transcription_model: Whisper model size ('tiny', 'base', 'small', 'medium', 'large')
@@ -374,7 +605,8 @@ def download_from_list(
     }
     
     print(f"Processing {len(video_urls)} video(s)...")
-    print(f"For live streams: Downloading past {past_hours} hour(s) of audio\n")
+    print(f"For live streams: Downloading next {past_hours} hour(s) of audio")
+    print(f"For stored live videos: Downloading past {past_hours} hour(s) from the end\n")
     
     for url in video_urls:
         # Get video info
@@ -391,7 +623,7 @@ def download_from_list(
         
         # Check if it's a live stream
         if is_live_stream(video_info):
-            print(f"  📡 Live stream detected - downloading past {past_hours} hour(s) of audio")
+            print(f"  📡 Live stream detected - downloading next {past_hours} hour(s) of audio")
             stats['live_streams'] += 1
             result = download_live_stream_audio(url, past_hours, output_dir)
             if result:
@@ -458,9 +690,14 @@ def download_from_list(
         
         # Check if it was a live stream (now stored)
         elif was_live_stream(video_info):
-            print(f"  💾 Stored live video detected - downloading full video audio")
+            print(f"  💾 Stored live video detected - downloading past {past_hours} hour(s) of audio")
             stats['stored_videos'] += 1
-            result = download_stored_video(url, output_dir)
+            # Try to download only past N hours
+            result = download_stored_video_past_hour(url, past_hours, output_dir)
+            # If that fails, fall back to full video download
+            if not result:
+                print(f"  ⚠ Past hour download failed, falling back to full video download...")
+                result = download_stored_video(url, output_dir)
             if result:
                 stats['downloaded'] += 1
                 # Auto-transcribe if enabled
