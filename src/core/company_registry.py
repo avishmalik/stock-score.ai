@@ -582,59 +582,22 @@ def find_company_mentions(text: str, min_confidence: float = 0.4) -> dict:
                     })
                     found_companies.add(sentence_key)
     
-    # Deduplicate: if both "asian paints" and "asianpaint" are found, keep only one
-    # Prefer the form that exists in COMMON_COMPANIES
-    deduplicated = {}
-    seen_bases = set()
-    
-    for company, contexts in company_mentions.items():
-        # Create base form (remove spaces, lowercase)
-        base_form = company.replace(' ', '').lower()
-        
-        if base_form not in seen_bases:
-            # First occurrence - use it
-            deduplicated[company] = contexts
-            seen_bases.add(base_form)
-        else:
-            # Duplicate found - check which one is in registry and prefer that
-            # If current one is in registry and previous wasn't, replace
-            if company in COMMON_COMPANIES:
-                # Find and replace the previous entry
-                for prev_company in list(deduplicated.keys()):
-                    prev_base = prev_company.replace(' ', '').lower()
-                    if prev_base == base_form and prev_company not in COMMON_COMPANIES:
-                        # Replace with the one in registry
-                        deduplicated[company] = deduplicated.pop(prev_company)
-                        break
-                else:
-                    # Both in registry or current not in registry - merge contexts
-                    for prev_company in deduplicated.keys():
-                        prev_base = prev_company.replace(' ', '').lower()
-                        if prev_base == base_form:
-                            # Merge contexts, prefer the shorter name
-                            if len(company) < len(prev_company):
-                                deduplicated[company] = list(set(deduplicated.pop(prev_company) + contexts))
-                            else:
-                                deduplicated[prev_company].extend(contexts)
-                                deduplicated[prev_company] = list(set(deduplicated[prev_company]))
-                            break
-    
-    # Convert back to simple format (list of sentences) but keep metadata available
-    # For backward compatibility, return simple dict, but analyzers can access metadata
+    # Convert to simple format (list of sentences) but keep metadata available
+    # Keep all companies (no deduplication for now - user requested)
     final_result = {}
-    for company, items in deduplicated.items():
-        if isinstance(items[0], dict):
-            # New format with metadata
+    for company, items in company_mentions.items():
+        if isinstance(items, list) and items and isinstance(items[0], dict):
+            # New format with metadata - extract sentences
             final_result[company] = [item['sentence'] for item in items]
-            # Store metadata separately for analyzers to use
-            final_result[f'__meta_{company}'] = {
+            # Store metadata separately (use lowercase for consistent matching)
+            final_result[f'__meta_{company.lower()}'] = {
                 'confidences': [item['confidence'] for item in items],
                 'false_positives': [item['likely_false_positive'] for item in items],
                 'avg_confidence': sum(item['confidence'] for item in items) / len(items),
                 'has_false_positive': any(item['likely_false_positive'] for item in items)
             }
         else:
-            # Old format (strings)
+            # Already in string format
             final_result[company] = items
     
     return final_result

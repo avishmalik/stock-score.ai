@@ -282,6 +282,14 @@ def analyze_company_sentiment(company: str, contexts: List[str], pipeline_obj) -
             'confidence': 0.0
         }
     
+    # Ensure contexts is a list (handle both list and dict formats)
+    if isinstance(contexts, dict):
+        # If it's a dict, extract the sentences
+        contexts = [item.get('sentence', item) if isinstance(item, dict) else item for item in contexts.values()]
+    elif isinstance(contexts, list) and contexts and isinstance(contexts[0], dict):
+        # If it's a list of dicts, extract sentences
+        contexts = [item.get('sentence', item) if isinstance(item, dict) else item for item in contexts]
+    
     combined_text = ' '.join(contexts)
     sentiment_score = analyze_sentiment_xlm_roberta(combined_text, pipeline_obj)
     
@@ -299,10 +307,10 @@ def analyze_company_sentiment(company: str, contexts: List[str], pipeline_obj) -
     return {
         'company': company.title(),
         'sentiment_score': round(sentiment_score, 3),
-        'mentions': mention_count,
+        'total_mentions': mention_count,
         'prediction': prediction,
         'confidence': round(confidence, 3),
-        'contexts': contexts[:3]
+        'sample_contexts': contexts[:3] if isinstance(contexts, list) else []
     }
 
 
@@ -410,17 +418,37 @@ def analyze_hindi_transcriptions(
             continue
         
         print(f"Analyzing (XLM-RoBERTa): {Path(text_file).name}")
-        company_mentions = extract_company_mentions(text)
+        company_mentions_raw = extract_company_mentions(text)
         
-        if not company_mentions:
+        if not company_mentions_raw:
             print("  No company mentions found")
             continue
+        
+        # Extract metadata and filter out metadata keys
+        company_mentions = {}
+        company_metadata = {}
+        for key, value in company_mentions_raw.items():
+            if key.startswith('__meta_'):
+                company_name = key.replace('__meta_', '')
+                company_metadata[company_name] = value
+            else:
+                company_mentions[key] = value
         
         print(f"  Found {len(company_mentions)} companies mentioned")
         
         results = []
         for company, contexts in company_mentions.items():
             analysis = analyze_company_sentiment(company, contexts, pipeline_obj)
+            
+            # Add false positive flag if metadata available
+            if company in company_metadata:
+                meta = company_metadata[company]
+                analysis['likely_false_positive'] = meta.get('has_false_positive', False)
+                analysis['match_confidence'] = round(meta.get('avg_confidence', 1.0), 3)
+            else:
+                analysis['likely_false_positive'] = False
+                analysis['match_confidence'] = 1.0
+            
             results.append(analysis)
         
         results.sort(key=lambda x: x['confidence'], reverse=True)
@@ -444,8 +472,10 @@ def analyze_hindi_transcriptions(
         for company_data in result.get('companies', []):
             company = company_data['company']
             combined_companies[company]['sentiment_scores'].append(company_data['sentiment_score'])
-            combined_companies[company]['mentions'] += company_data['mentions']
-            combined_companies[company]['contexts'].extend(company_data.get('contexts', []))
+            # Handle both 'mentions' and 'total_mentions' field names
+            mentions = company_data.get('total_mentions', company_data.get('mentions', 0))
+            combined_companies[company]['mentions'] += mentions
+            combined_companies[company]['contexts'].extend(company_data.get('sample_contexts', company_data.get('contexts', [])))
     
     final_results = []
     for company, data in combined_companies.items():

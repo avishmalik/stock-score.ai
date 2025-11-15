@@ -120,13 +120,19 @@ def analyze_company_sentiment(company: str, contexts: List[str]) -> Dict:
     
     confidence = min(abs(sentiment_score) * (1 + min(mention_count / 10, 0.5)), 1.0)
     
+    # Ensure contexts is a list before slicing
+    if isinstance(contexts, list):
+        sample_contexts = contexts[:3]
+    else:
+        sample_contexts = []
+    
     return {
         'company': company.title(),
         'sentiment_score': round(sentiment_score, 3),
-        'mentions': mention_count,
+        'total_mentions': mention_count,
         'prediction': prediction,
         'confidence': round(confidence, 3),
-        'contexts': contexts[:3]
+        'sample_contexts': sample_contexts
     }
 
 
@@ -194,16 +200,37 @@ def analyze_transcriptions(
             continue
         
         print(f"Analyzing (TextBlob): {Path(text_file).name}")
-        company_mentions = extract_company_mentions(text)
+        company_mentions_raw = extract_company_mentions(text)
         
-        if not company_mentions:
+        if not company_mentions_raw:
             continue
+        
+        # Extract metadata and filter out metadata keys
+        company_mentions = {}
+        company_metadata = {}
+        for key, value in company_mentions_raw.items():
+            if key.startswith('__meta_'):
+                company_name = key.replace('__meta_', '').lower()
+                company_metadata[company_name] = value
+            else:
+                company_mentions[key] = value
         
         print(f"  Found {len(company_mentions)} companies mentioned")
         
         results = []
         for company, contexts in company_mentions.items():
             analysis = analyze_company_sentiment(company, contexts)
+            
+            # Add false positive flag if metadata available (case-insensitive match)
+            company_lower = company.lower()
+            if company_lower in company_metadata:
+                meta = company_metadata[company_lower]
+                analysis['likely_false_positive'] = meta.get('has_false_positive', False)
+                analysis['match_confidence'] = round(meta.get('avg_confidence', 1.0), 3)
+            else:
+                analysis['likely_false_positive'] = False
+                analysis['match_confidence'] = 1.0
+            
             results.append(analysis)
         
         results.sort(key=lambda x: x['confidence'], reverse=True)
@@ -220,15 +247,24 @@ def analyze_transcriptions(
     combined_companies = defaultdict(lambda: {
         'sentiment_scores': [],
         'mentions': 0,
-        'contexts': []
+        'contexts': [],
+        'flags': []  # Store flags from individual analyses
     })
     
     for result in all_results:
         for company_data in result.get('companies', []):
             company = company_data['company']
             combined_companies[company]['sentiment_scores'].append(company_data['sentiment_score'])
-            combined_companies[company]['mentions'] += company_data['mentions']
-            combined_companies[company]['contexts'].extend(company_data.get('contexts', []))
+            # Handle both 'mentions' and 'total_mentions' field names
+            mentions = company_data.get('total_mentions', company_data.get('mentions', 0))
+            combined_companies[company]['mentions'] += mentions
+            combined_companies[company]['contexts'].extend(company_data.get('sample_contexts', company_data.get('contexts', [])))
+            # Preserve flags
+            if 'likely_false_positive' in company_data:
+                combined_companies[company]['flags'].append({
+                    'likely_false_positive': company_data.get('likely_false_positive', False),
+                    'match_confidence': company_data.get('match_confidence', 1.0)
+                })
     
     final_results = []
     for company, data in combined_companies.items():
@@ -243,14 +279,24 @@ def analyze_transcriptions(
         
         confidence = min(abs(avg_sentiment) * (1 + min(data['mentions'] / 10, 0.5)), 1.0)
         
-        final_results.append({
+        result_dict = {
             'company': company,
             'sentiment_score': round(avg_sentiment, 3),
             'total_mentions': data['mentions'],
             'prediction': prediction,
             'confidence': round(confidence, 3),
             'sample_contexts': data['contexts'][:2]
-        })
+        }
+        
+        # Add flags if available (use first flag's values, or aggregate)
+        if data['flags']:
+            result_dict['likely_false_positive'] = any(f['likely_false_positive'] for f in data['flags'])
+            result_dict['match_confidence'] = round(sum(f['match_confidence'] for f in data['flags']) / len(data['flags']), 3)
+        else:
+            result_dict['likely_false_positive'] = False
+            result_dict['match_confidence'] = 1.0
+        
+        final_results.append(result_dict)
     
     final_results.sort(key=lambda x: x['confidence'], reverse=True)
     
