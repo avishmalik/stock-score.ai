@@ -125,12 +125,39 @@ def run_analysis_pipeline(urls: list, past_hours: int = 1, transcription_model: 
         
         # Step 3: Check if transcription files exist
         text_dir = Path('downloads/text_files')
-        text_files = list(text_dir.glob('*_transcribed.txt'))
+        audio_dir = Path('downloads/audio')
+        downloads_dir = Path('downloads')
+        
+        # First check if audio files were downloaded
+        audio_files = []
+        audio_extensions = ['.mp3', '.m4a', '.wav', '.ogg', '.flac', '.webm', '.opus']
+        for ext in audio_extensions:
+            audio_files.extend(list(downloads_dir.glob(f"*{ext}")))
+            audio_files.extend(list(downloads_dir.glob(f"*{ext.upper()}")))
+            if audio_dir.exists():
+                audio_files.extend(list(audio_dir.glob(f"*{ext}")))
+                audio_files.extend(list(audio_dir.glob(f"*{ext.upper()}")))
+        
+        text_files = list(text_dir.glob('*_transcribed.txt')) if text_dir.exists() else []
         # Exclude Hindi transcribed files
         text_files = [f for f in text_files if '_hindi_transcribed.txt' not in str(f)]
         
         if not text_files:
-            analysis_status['errors'].append('No transcribed files found. Transcription may have failed.')
+            error_msg = 'No transcribed files found.'
+            if audio_files:
+                error_msg += f' Found {len(audio_files)} audio file(s) but transcription may have failed. Please check transcription logs.'
+            elif download_stats.get('downloaded', 0) > 0:
+                error_msg += f' Audio download reported success but no audio files found. Please check downloads directory.'
+            else:
+                error_msg += ' No audio files were downloaded. Please check if the video URLs are valid and accessible.'
+            
+            analysis_status['errors'].append(error_msg)
+            analysis_status['results']['diagnostics'] = {
+                'audio_files_found': len(audio_files),
+                'audio_file_paths': [str(f) for f in audio_files[:5]],  # Show first 5
+                'text_dir_exists': text_dir.exists(),
+                'download_stats': download_stats
+            }
             analysis_status['running'] = False
             return
         
@@ -278,6 +305,57 @@ def results():
     }
     
     return jsonify(results_data)
+
+
+@app.route('/api/transcribe', methods=['POST'])
+def transcribe_audio():
+    """Manually trigger transcription for existing audio files."""
+    from src.core.audio_transcriber import transcribe_directory
+    
+    data = request.get_json() or {}
+    transcription_model = data.get('transcription_model', 'base')
+    
+    downloads_dir = Path('downloads')
+    audio_dir = Path('downloads/audio')
+    text_dir = Path('downloads/text_files')
+    
+    # Find audio files in downloads and audio directories
+    audio_files = []
+    audio_extensions = ['.mp3', '.m4a', '.wav', '.ogg', '.flac', '.webm', '.opus']
+    for ext in audio_extensions:
+        audio_files.extend(list(downloads_dir.glob(f"*{ext}")))
+        audio_files.extend(list(downloads_dir.glob(f"*{ext.upper()}")))
+        if audio_dir.exists():
+            audio_files.extend(list(audio_dir.glob(f"*{ext}")))
+            audio_files.extend(list(audio_dir.glob(f"*{ext.upper()}")))
+    
+    if not audio_files:
+        return jsonify({
+            'success': False,
+            'message': 'No audio files found. Please download audio files first.'
+        }), 404
+    
+    # Transcribe all audio files
+    try:
+        stats = transcribe_directory(
+            audio_dir=str(downloads_dir),
+            output_dir=str(text_dir),
+            audio_storage_dir=str(audio_dir),
+            model_size=transcription_model
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': f'Transcription completed. Processed {stats["processed"]} file(s), {stats["failed"]} failed.',
+            'stats': stats
+        })
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'success': False,
+            'message': f'Transcription failed: {str(e)}',
+            'error_details': traceback.format_exc()
+        }), 500
 
 
 if __name__ == '__main__':

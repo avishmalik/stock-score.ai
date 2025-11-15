@@ -195,27 +195,45 @@ def load_companies_from_file(file_path: str = None) -> None:
     Useful for maintaining a separate company list file.
     
     Args:
-        file_path: Path to JSON file with companies list (defaults to config/companies.json)
+        file_path: Path to JSON file with companies list 
+                   (defaults to config/india_companies_registry.json)
     """
     import json
     import os
     global ALL_INDIAN_COMPANIES, COMMON_COMPANIES
     
     if file_path is None:
-        # Default to config/companies.json relative to project root
+        # Default to config/india_companies_registry.json relative to project root
         current_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(os.path.dirname(current_dir))
-        file_path = os.path.join(project_root, 'config', 'companies.json')
+        # Try india_companies_registry.json first, fallback to companies.json
+        india_registry = os.path.join(project_root, 'config', 'india_companies_registry.json')
+        if os.path.exists(india_registry):
+            file_path = india_registry
+        else:
+            file_path = os.path.join(project_root, 'config', 'companies.json')
     
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
             companies = set(data.get('companies', []))
-            ALL_INDIAN_COMPANIES.update(companies)
+            # Replace existing companies with those from file (to use the registry as source of truth)
+            ALL_INDIAN_COMPANIES = companies.copy()
             COMMON_COMPANIES = ALL_INDIAN_COMPANIES
             print(f"✓ Loaded {len(companies)} companies from {file_path}")
     except Exception as e:
         print(f"⚠ Error loading companies from file: {e}")
+        print(f"  Using default company list instead.")
+
+
+# Auto-load companies from registry file on import
+# This ensures all analyzers use the latest company list
+# Must be called after load_companies_from_file is defined
+try:
+    load_companies_from_file()
+except:
+    # If loading fails, use default list
+    pass
 
 
 if __name__ == '__main__':

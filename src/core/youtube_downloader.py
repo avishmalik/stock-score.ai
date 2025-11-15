@@ -473,7 +473,7 @@ def download_stored_video_past_hour(url: str, past_hours: int, output_dir: str =
         return False
 
 
-def download_stored_video(url: str, output_dir: str = 'downloads') -> bool:
+def download_stored_video(url: str, output_dir: str = 'downloads') -> Optional[str]:
     """
     Download the full video (audio) from a stored live stream video.
     
@@ -482,7 +482,7 @@ def download_stored_video(url: str, output_dir: str = 'downloads') -> bool:
         output_dir: Directory to save audio files
     
     Returns:
-        True if successful, False otherwise
+        Path to downloaded file if successful, False otherwise
     """
     os.makedirs(output_dir, exist_ok=True)
     
@@ -518,7 +518,7 @@ def download_stored_video(url: str, output_dir: str = 'downloads') -> bool:
             downloaded_files = glob.glob(os.path.join(output_dir, '*.mp3'))
             if downloaded_files:
                 return max(downloaded_files, key=os.path.getmtime)
-            return True
+            return None
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
             continue
     
@@ -561,7 +561,7 @@ def download_stored_video(url: str, output_dir: str = 'downloads') -> bool:
             else:
                 print(f"  Error: {error_msg}")
         print()
-        return False
+        return None
 
 
 def download_from_list(
@@ -610,8 +610,15 @@ def download_from_list(
     
     for url in video_urls:
         # Get video info
+        print(f"Fetching video info for: {url}")
         video_info = get_video_info(url)
         if not video_info:
+            print(f"✗ Failed to get video info for {url}")
+            print(f"  Possible reasons:")
+            print(f"    - Video is private or unavailable")
+            print(f"    - Invalid URL")
+            print(f"    - Network error")
+            print(f"    - YouTube API/access restrictions\n")
             stats['failed'] += 1
             continue
         
@@ -763,10 +770,38 @@ def download_from_list(
             else:
                 stats['failed'] += 1
         
-        # Not a live stream or stored live video
+        # Not a live stream or stored live video - treat as regular video
         else:
-            print(f"  ⏭ Skipped (not a live stream or stored live video)\n")
-            stats['skipped'] += 1
+            print(f"  📹 Regular video detected - downloading full video audio")
+            stats['stored_videos'] += 1  # Count as stored video for stats
+            result = download_stored_video(url, output_dir)
+            if result:
+                stats['downloaded'] += 1
+                # Auto-transcribe if enabled
+                if auto_transcribe:
+                    audio_file = result if isinstance(result, str) else None
+                    if not audio_file:
+                        # Find the most recently downloaded file
+                        import glob
+                        downloaded_files = glob.glob(os.path.join(output_dir, '*.mp3'))
+                        if downloaded_files:
+                            audio_file = max(downloaded_files, key=os.path.getmtime)
+                    
+                    if audio_file and os.path.exists(audio_file):
+                        print(f"  🎤 Starting transcription (with translation)...")
+                        try:
+                            from src.core.audio_transcriber import transcribe_audio
+                            transcribe_audio(
+                                audio_file,
+                                output_dir=os.path.join(output_dir, 'text_files'),
+                                audio_storage_dir=os.path.join(output_dir, 'audio'),
+                                model_size=transcription_model
+                            )
+                        except Exception as e:
+                            print(f"  ⚠ Transcription failed: {e}")
+            else:
+                stats['failed'] += 1
+                print(f"  ✗ Failed to download video\n")
     
     return stats
 

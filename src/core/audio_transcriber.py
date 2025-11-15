@@ -94,7 +94,10 @@ def transcribe_audio(
             task="translate"  # Translate to English
         )
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
         print(f"✗ Transcription failed: {e}")
+        print(f"  Error details: {error_details}")
         return None
     
     # Get detected language

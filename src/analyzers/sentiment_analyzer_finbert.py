@@ -24,24 +24,28 @@ except ImportError:
     HAS_TRANSFORMERS = False
     print("⚠ Transformers not found. Install with: pip install transformers torch")
 
-COMMON_COMPANIES = {
-    'reliance', 'tcs', 'infosys', 'hdfc', 'icici', 'sbi', 'bharti', 'lt', 'hcl', 'wipro',
-    'maruti', 'tata', 'adani', 'jsw', 'vedanta', 'hindalco', 'tata motors', 'm&m', 'mm', 'mahindra',
-    'dlf', 'grasim', 'ultratech', 'ambuja', 'shree cement', 'dabur', 'hul', 'itc',
-    'asian paints', 'berger paints', 'nippon', 'indigo', 'spicejet', 'airtel', 'jio',
-    'lic', 'sbi bank', 'hdfc bank', 'icici bank', 'axis bank', 'kotak', 'pnb', 'rbl bank',
-    'nifty', 'sensex', 'bank nifty', 'nifty 50', 'nifty bank',
-    'tata steel', 'jsw steel', 'sail', 'coal india', 'ongc', 'ioc', 'bpcl', 'hpcl',
-    'zomato', 'nykaa', 'paytm', 'policybazaar', 'delhivery',
-    'lupin', 'dr reddy', 'sun pharma', 'cipla', 'torrent', 'mankind', 'glenmark', 'mankind pharma',
-    'nhpc', 'power grid', 'ntpc', 'suzlon', 'adani green', 'tata power',
-    'upl', 'coromandel', 'rallis', 'pi industries',
-    'mcx', 'nse', 'bse', 'ncdx',
-    'chola', 'cummins', 'abb', 'abb india', 'zyder', 'life sciences', 'goedrich', 'goedrich properties',
-    'amber', 'crompton', 'ncc', 'apollo', 'apollo hospital', 'jsw', 'fortis', 'ge', 'varunova',
-    'seaman', 'tata elxsi', 'container corporation', 'jeffries', 'grasim payal',
-    'man-kind pharma', 'upn', 'chohada', 'vyada', 'bazaar'
-}
+# Import centralized company registry
+try:
+    from src.core.company_registry import COMMON_COMPANIES
+except ImportError:
+    try:
+        from core.company_registry import COMMON_COMPANIES
+    except ImportError:
+        # Fallback to basic list if registry not available
+        COMMON_COMPANIES = {
+            'reliance', 'tcs', 'infosys', 'hdfc', 'icici', 'sbi', 'bharti', 'lt', 'hcl', 'wipro',
+            'maruti', 'tata', 'adani', 'jsw', 'vedanta', 'hindalco', 'tata motors', 'm&m', 'mm', 'mahindra',
+            'dlf', 'grasim', 'ultratech', 'ambuja', 'shree cement', 'dabur', 'hul', 'itc',
+            'asian paints', 'berger paints', 'nippon', 'indigo', 'spicejet', 'airtel', 'jio',
+            'lic', 'sbi bank', 'hdfc bank', 'icici bank', 'axis bank', 'kotak', 'pnb', 'rbl bank',
+            'nifty', 'sensex', 'bank nifty', 'nifty 50', 'nifty bank',
+            'tata steel', 'jsw steel', 'sail', 'coal india', 'ongc', 'ioc', 'bpcl', 'hpcl',
+            'zomato', 'nykaa', 'paytm', 'policybazaar', 'delhivery',
+            'lupin', 'dr reddy', 'sun pharma', 'cipla', 'torrent', 'mankind', 'glenmark', 'mankind pharma',
+            'nhpc', 'power grid', 'ntpc', 'suzlon', 'adani green', 'tata power',
+            'upl', 'coromandel', 'rallis', 'pi industries',
+            'mcx', 'nse', 'bse', 'ncdx'
+        }
 
 # FinBERT model configuration
 FINBERT_MODEL = "ProsusAI/finbert"
