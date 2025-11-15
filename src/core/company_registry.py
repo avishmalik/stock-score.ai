@@ -5,6 +5,8 @@ Centralized list of Indian stock market companies and indices.
 All sentiment analyzers should import from this file to maintain consistency.
 """
 
+import re
+
 # Indian Stock Market Companies
 INDIAN_COMPANIES = {
     # Major Indian companies
@@ -226,6 +228,270 @@ def load_companies_from_file(file_path: str = None) -> None:
         print(f"  Using default company list instead.")
 
 
+def get_sorted_companies() -> list:
+    """
+    Get companies sorted by length (longest first).
+    This helps match longer company names before shorter ones to avoid partial matches.
+    """
+    return sorted(COMMON_COMPANIES, key=lambda x: (-len(x), x))
+
+
+# Common words to exclude from matching (to avoid false positives)
+COMMON_WORDS_TO_EXCLUDE = {
+    'fact', 'idea', 'act', 'art', 'it', 'is', 'as', 'at', 'an', 'am', 'if', 'in', 'on', 'or',
+    'be', 'by', 'do', 'go', 'he', 'me', 'my', 'no', 'of', 'so', 'to', 'up', 'we', 'us'
+}
+
+def create_company_aliases() -> dict:
+    """
+    Create aliases mapping common full names to registry abbreviations.
+    Helps match "Bharat Dynamics" -> "bdl", "Muthoot Finance" -> "muthootfin", etc.
+    """
+    aliases = {
+        # Full name -> registry abbreviation
+        'bharat dynamics': 'bdl',
+        'muthoot finance': 'muthootfin',
+        'ipca labs': 'ipcalab',
+        'ipca': 'ipcalab',
+        'jubilant food': 'jublfood',
+        'jubilant': 'jublfood',
+        'pine labs': 'pinelabs',
+        'hcl tech': 'hcl',
+        'hcl technologies': 'hcl',
+        'tata consultancy': 'tcs',
+        'tata consultancy services': 'tcs',
+        'sun pharma': 'sunpharma',
+        'dr reddy': 'drreddy',
+        'asian paints': 'asianpaint',
+        'axis bank': 'axisbank',
+        'kotak bank': 'kotakbank',
+        'kotak mahindra': 'kotakbank',
+        'hdfc bank': 'hdfcbank',
+        'icici bank': 'icicibank',
+        'sbi bank': 'sbin',
+        'state bank': 'sbin',
+        'bharti airtel': 'bhartiartl',
+        'adani enterprises': 'adanient',
+        'adani ports': 'adaniports',
+        'adani power': 'adanipower',
+        'adani green': 'adanigreen',
+        'adani transmission': 'adanitrans',
+        'power grid': 'powergrid',
+        'coal india': 'coalindia',
+        'oil india': 'oil',
+        'indian oil': 'ioc',
+        'bank of baroda': 'bankbaroda',
+        'canara bank': 'canbk',
+        'union bank': 'unionbank',
+        'pnb': 'pnb',
+        'punjab national bank': 'pnb',
+        'idfc first bank': 'idfcfirstb',
+        'bandhan bank': 'bandhanbnk',
+        'yes bank': 'yesbank',
+        'federal bank': 'federalbnk',
+        'rbl bank': 'rblbank',
+        'apollo hospitals': 'apollohosp',
+        'max healthcare': 'maxhealth',
+        'dr lal pathlabs': 'lalpathlab',
+        'bharat electronics': 'bel',
+        'bharat heavy electricals': 'bhel',
+        'bharat forge': 'bharatforg',
+        'larsen & toubro': 'lt',
+        'l&t': 'lt',
+        'mahindra & mahindra': 'm&m',
+        'm&m': 'm&m',
+        'grasim industries': 'grasim',
+        'ultratech cement': 'ultratech',
+        'ambuja cements': 'ambujacem',
+        'shree cement': 'shreecement',
+        'tata motors': 'tatamotors',
+        'tata steel': 'tatasteel',
+        'tata power': 'tatapower',
+        'jsw steel': 'jswsteel',
+        'vedanta limited': 'vedanta',
+        'hindalco industries': 'hindalco',
+        'national aluminium': 'nalco',
+        'hindustan zinc': 'hzl',
+        'nhpc': 'nhpc',
+        'ntpc': 'ntpc',
+        'sjvn': 'sjvn',
+        'irfc': 'irfc',
+        'ircon': 'ircon',
+        'rvnl': 'rvnl',
+        'bel': 'bel',
+        'bhel': 'bhel',
+        'bdl': 'bdl',
+    }
+    return aliases
+
+
+def find_company_mentions(text: str) -> dict:
+    """
+    Find all company mentions in text using flexible matching.
+    Returns dict mapping company names to list of sentences where they appear.
+    
+    This function:
+    - Matches companies case-insensitively
+    - Handles partial matches (e.g., "bharat" matches "bharatforg", "bdl")
+    - Handles abbreviations (BDL -> bdl, IPCA Labs -> ipcalab)
+    - Sorts by length (longest first) to match longer names before shorter ones
+    - Handles multi-word company names flexibly
+    """
+    from collections import defaultdict
+    
+    text_lower = text.lower()
+    company_mentions = defaultdict(list)
+    
+    # Get aliases for common full names
+    aliases = create_company_aliases()
+    
+    # Get companies sorted by length (longest first) to avoid partial matches
+    sorted_companies = sorted(COMMON_COMPANIES, key=lambda x: (-len(x), x))
+    
+    # Split into sentences
+    sentences = re.split(r'[.!?।]+', text)
+    
+    # Track which companies have been found to avoid duplicates
+    found_companies = set()
+    
+    for sentence in sentences:
+        sentence_lower = sentence.lower()
+        sentence_clean = sentence.strip()
+        
+        if len(sentence_clean) < 10:  # Skip very short sentences
+            continue
+        
+        # First, check aliases (full names -> abbreviations)
+        for full_name, abbrev in aliases.items():
+            if abbrev in COMMON_COMPANIES:
+                # Check if full name appears in sentence
+                full_name_words = full_name.split()
+                if len(full_name_words) > 1:
+                    # Multi-word: check if all words appear close together
+                    all_found = True
+                    positions = []
+                    for word in full_name_words:
+                        pattern = r'\b' + re.escape(word)
+                        match = re.search(pattern, sentence_lower)
+                        if match:
+                            positions.append(match.start())
+                        else:
+                            all_found = False
+                            break
+                    
+                    if all_found and positions:
+                        max_pos = max(positions)
+                        min_pos = min(positions)
+                        if max_pos - min_pos < 50:  # Words close together
+                            sentence_key = f"{abbrev}:{sentence_clean[:50]}"
+                            if sentence_key not in found_companies:
+                                company_mentions[abbrev].append(sentence_clean)
+                                found_companies.add(sentence_key)
+                else:
+                    # Single word alias
+                    if re.search(r'\b' + re.escape(full_name) + r'\b', sentence_lower):
+                        sentence_key = f"{abbrev}:{sentence_clean[:50]}"
+                        if sentence_key not in found_companies:
+                            company_mentions[abbrev].append(sentence_clean)
+                            found_companies.add(sentence_key)
+        
+        # Then check direct company matches
+        for company in sorted_companies:
+            company_lower = company.lower()
+            
+            # Skip if already found via alias
+            sentence_key = f"{company}:{sentence_clean[:50]}"
+            if sentence_key in found_companies:
+                continue
+            
+            matched = False
+            words = company_lower.split()
+            
+            # Skip very short company names that are common words (to avoid false positives)
+            if len(company_lower) <= 3 and company_lower in COMMON_WORDS_TO_EXCLUDE:
+                continue
+            
+            # Strategy 1: Exact match (with word boundaries)
+            exact_pattern = r'\b' + re.escape(company_lower) + r'\b'
+            if re.search(exact_pattern, sentence_lower):
+                matched = True
+            else:
+                # Strategy 2: Partial match - company name appears as start of a word
+                # e.g., "bdl" matches "BDL", "hcl" matches "HCL Tech"
+                # But skip if it's a very short common word
+                if len(company_lower) >= 4 or company_lower not in COMMON_WORDS_TO_EXCLUDE:
+                    partial_pattern = r'\b' + re.escape(company_lower) + r'(\w*)?'
+                    if re.search(partial_pattern, sentence_lower):
+                        matched = True
+                
+                if not matched:
+                    # Strategy 3: Multi-word matching
+                    if len(words) > 1:
+                        all_words_found = True
+                        word_positions = []
+                        
+                        for word in words:
+                            # Skip very short words that are common
+                            if len(word) <= 2 and word in COMMON_WORDS_TO_EXCLUDE:
+                                continue
+                            pattern = r'\b' + re.escape(word)
+                            match = re.search(pattern, sentence_lower)
+                            if match:
+                                word_positions.append(match.start())
+                            else:
+                                all_words_found = False
+                                break
+                        
+                        if all_words_found and word_positions:
+                            max_pos = max(word_positions)
+                            min_pos = min(word_positions)
+                            if max_pos - min_pos < 50:
+                                matched = True
+            
+            if matched:
+                company_mentions[company].append(sentence_clean)
+                found_companies.add(sentence_key)
+    
+    # Deduplicate: if both "asian paints" and "asianpaint" are found, keep only one
+    # Prefer the form that exists in COMMON_COMPANIES
+    deduplicated = {}
+    seen_bases = set()
+    
+    for company, contexts in company_mentions.items():
+        # Create base form (remove spaces, lowercase)
+        base_form = company.replace(' ', '').lower()
+        
+        if base_form not in seen_bases:
+            # First occurrence - use it
+            deduplicated[company] = contexts
+            seen_bases.add(base_form)
+        else:
+            # Duplicate found - check which one is in registry and prefer that
+            # If current one is in registry and previous wasn't, replace
+            if company in COMMON_COMPANIES:
+                # Find and replace the previous entry
+                for prev_company in list(deduplicated.keys()):
+                    prev_base = prev_company.replace(' ', '').lower()
+                    if prev_base == base_form and prev_company not in COMMON_COMPANIES:
+                        # Replace with the one in registry
+                        deduplicated[company] = deduplicated.pop(prev_company)
+                        break
+                else:
+                    # Both in registry or current not in registry - merge contexts
+                    for prev_company in deduplicated.keys():
+                        prev_base = prev_company.replace(' ', '').lower()
+                        if prev_base == base_form:
+                            # Merge contexts, prefer the shorter name
+                            if len(company) < len(prev_company):
+                                deduplicated[company] = list(set(deduplicated.pop(prev_company) + contexts))
+                            else:
+                                deduplicated[prev_company].extend(contexts)
+                                deduplicated[prev_company] = list(set(deduplicated[prev_company]))
+                            break
+    
+    return deduplicated
+
+
 # Auto-load companies from registry file on import
 # This ensures all analyzers use the latest company list
 # Must be called after load_companies_from_file is defined
@@ -247,4 +513,3 @@ if __name__ == '__main__':
         else:
             break
     print("  ...")
-

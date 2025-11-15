@@ -132,22 +132,33 @@ def analyze_sentiment_ngram(text: str) -> float:
 
 
 def extract_company_mentions(text: str) -> Dict[str, List[str]]:
-    """Extract company mentions and surrounding context."""
-    text_lower = text.lower()
-    company_mentions = defaultdict(list)
-    
-    sentences = re.split(r'[.!?]+', text)
-    
-    for sentence in sentences:
-        sentence_lower = sentence.lower()
-        for company in COMMON_COMPANIES:
-            pattern = r'\b' + re.escape(company) + r'\b'
-            if re.search(pattern, sentence_lower):
-                clean_sentence = sentence.strip()
-                if len(clean_sentence) > 10:
-                    company_mentions[company].append(clean_sentence)
-    
-    return company_mentions
+    # Ensure project root is in path for imports
+    import sys
+    project_root = Path(__file__).parent.parent.parent
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
+    """Extract company mentions and surrounding context. Uses improved matching from company registry."""
+    try:
+        from src.core.company_registry import find_company_mentions
+        return find_company_mentions(text)
+    except ImportError:
+        try:
+            from core.company_registry import find_company_mentions
+            return find_company_mentions(text)
+        except ImportError:
+            # Fallback to basic matching
+            text_lower = text.lower()
+            company_mentions = defaultdict(list)
+            sentences = re.split(r'[.!?]+', text)
+            for sentence in sentences:
+                sentence_lower = sentence.lower()
+                for company in COMMON_COMPANIES:
+                    pattern = r'\b' + re.escape(company) + r'\b'
+                    if re.search(pattern, sentence_lower):
+                        clean_sentence = sentence.strip()
+                        if len(clean_sentence) > 10:
+                            company_mentions[company].append(clean_sentence)
+            return company_mentions
 
 
 def analyze_company_sentiment(company: str, contexts: List[str]) -> Dict:

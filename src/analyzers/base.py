@@ -122,26 +122,40 @@ def extract_company_mentions(text: str) -> Dict[str, List[str]]:
     """
     Extract company mentions and surrounding context.
     Returns dict mapping company names to list of context sentences.
+    Uses improved matching from company registry.
     """
-    text_lower = text.lower()
-    company_mentions = defaultdict(list)
+    # Ensure project root is in path for imports
+    import sys
+    project_root = Path(__file__).parent.parent.parent
+    if str(project_root) not in sys.path:
+        sys.path.insert(0, str(project_root))
     
-    # Split into sentences
-    sentences = re.split(r'[.!?]+', text)
-    
-    for sentence in sentences:
-        sentence_lower = sentence.lower()
-        # Check for each company
-        for company in COMMON_COMPANIES:
-            # Look for company name in sentence (word boundary matching)
-            pattern = r'\b' + re.escape(company) + r'\b'
-            if re.search(pattern, sentence_lower):
-                # Clean up sentence
-                clean_sentence = sentence.strip()
-                if len(clean_sentence) > 10:  # Only keep meaningful sentences
-                    company_mentions[company].append(clean_sentence)
-    
-    return company_mentions
+    try:
+        from src.core.company_registry import find_company_mentions
+        return find_company_mentions(text)
+    except ImportError:
+        try:
+            from core.company_registry import find_company_mentions
+            return find_company_mentions(text)
+        except ImportError:
+            # Fallback to basic matching - use improved logic with COMMON_COMPANIES
+            text_lower = text.lower()
+            company_mentions = defaultdict(list)
+            sentences = re.split(r'[.!?]+', text)
+            # Sort companies by length (longest first) for better matching
+            sorted_companies = sorted(COMMON_COMPANIES, key=lambda x: (-len(x), x))
+            
+            for sentence in sentences:
+                sentence_lower = sentence.lower()
+                for company in sorted_companies:
+                    # Use flexible matching
+                    pattern = r'\b' + re.escape(company.lower()) + r'(\w*)?'
+                    if re.search(pattern, sentence_lower):
+                        clean_sentence = sentence.strip()
+                        if len(clean_sentence) > 10:
+                            company_mentions[company].append(clean_sentence)
+            
+            return company_mentions
 
 
 def analyze_company_sentiment(
