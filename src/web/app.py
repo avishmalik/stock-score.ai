@@ -24,6 +24,7 @@ sys.path.insert(0, project_root)
 
 from src.core.youtube_downloader import download_from_list
 from scripts.run_all_analyzers import SENTIMENT_ANALYZERS, run_analyzer
+from scripts.create_stock_report import create_stock_report
 
 # Set template folder relative to project root
 template_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'templates')
@@ -67,7 +68,7 @@ def extract_youtube_urls(text: str) -> list:
     return urls
 
 
-def run_analysis_pipeline(urls: list, past_hours: int = 1, transcription_model: str = 'base'):
+def run_analysis_pipeline(urls: list, duration: int = None, past_hours: int = 1, transcription_model: str = 'base'):
     """Run the complete analysis pipeline."""
     global analysis_status
     
@@ -201,6 +202,36 @@ def run_analysis_pipeline(urls: list, past_hours: int = 1, transcription_model: 
         chart_files = list(output_path.glob('*.png'))
         analysis_status['results']['chart_files'] = [f.name for f in sorted(chart_files)]
         
+        # Step 6: Generate reports and prompts
+        analysis_status['current_step'] = 'Generating reports and prompts...'
+        analysis_status['progress'] = 98
+        
+        try:
+            create_stock_report(
+                analysis_dir='downloads/analysis',
+                text_dir='downloads/text_files',
+                output_dir='downloads/reports'
+            )
+            
+            # Read generated prompts
+            reports_dir = Path('downloads/reports')
+            cursor_prompt_path = reports_dir / 'cursor_prompt.txt'
+            chatgpt_prompt_path = reports_dir / 'chatgpt_prompt.txt'
+            
+            prompts = {}
+            if cursor_prompt_path.exists():
+                prompts['cursor'] = cursor_prompt_path.read_text(encoding='utf-8')
+            if chatgpt_prompt_path.exists():
+                prompts['chatgpt'] = chatgpt_prompt_path.read_text(encoding='utf-8')
+            
+            analysis_status['results']['prompts'] = prompts
+            analysis_status['results']['prompts_generated'] = True
+        except Exception as e:
+            analysis_status['errors'].append(f'Error generating reports: {str(e)}')
+            import traceback
+            analysis_status['errors'].append(traceback.format_exc())
+            analysis_status['results']['prompts_generated'] = False
+        
         analysis_status['current_step'] = 'Analysis complete!'
         analysis_status['progress'] = 100
         analysis_status['completed_steps'] = analysis_status['total_steps']
@@ -232,8 +263,15 @@ def analyze():
     
     data = request.get_json()
     urls_text = data.get('urls', '')
+    duration = data.get('duration')  # Duration in minutes (optional)
     past_hours = int(data.get('past_hours', 1))
     transcription_model = data.get('transcription_model', 'base')
+    
+    # If duration is provided, use it; otherwise use past_hours
+    if duration:
+        # Convert duration to past_hours (approximate)
+        # For regular videos, duration doesn't affect download, but we'll store it
+        pass
     
     if not urls_text:
         return jsonify({
@@ -264,7 +302,7 @@ def analyze():
     # Start analysis in background thread
     thread = threading.Thread(
         target=run_analysis_pipeline,
-        args=(urls, past_hours, transcription_model)
+        args=(urls, duration, past_hours, transcription_model)
     )
     thread.daemon = True
     thread.start()
@@ -287,6 +325,7 @@ def status():
 def results():
     """Get analysis results."""
     output_dir = Path('downloads/analysis')
+    reports_dir = Path('downloads/reports')
     
     if not output_dir.exists():
         return jsonify({
@@ -297,10 +336,21 @@ def results():
     json_files = list(output_dir.glob('*_predictions.json'))
     chart_files = list(output_dir.glob('*.png'))
     
+    # Read prompts if they exist
+    prompts = {}
+    cursor_prompt_path = reports_dir / 'cursor_prompt.txt'
+    chatgpt_prompt_path = reports_dir / 'chatgpt_prompt.txt'
+    
+    if cursor_prompt_path.exists():
+        prompts['cursor'] = cursor_prompt_path.read_text(encoding='utf-8')
+    if chatgpt_prompt_path.exists():
+        prompts['chatgpt'] = chatgpt_prompt_path.read_text(encoding='utf-8')
+    
     results_data = {
         'success': True,
         'json_files': [f.name for f in sorted(json_files)],
         'chart_files': [f.name for f in sorted(chart_files)],
+        'prompts': prompts,
         'output_directory': str(output_dir.absolute())
     }
     
