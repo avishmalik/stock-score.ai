@@ -97,10 +97,20 @@ def analyze_company_sentiment(company: str, contexts: List[str], analyzer) -> Di
             'confidence': 0.0
         }
     
-    combined_text = ' '.join(contexts)
+    # Ensure contexts are strings (handle dict format from metadata)
+    contexts_str = []
+    for ctx in contexts:
+        if isinstance(ctx, dict):
+            contexts_str.append(ctx.get('sentence', str(ctx)))
+        elif isinstance(ctx, str):
+            contexts_str.append(ctx)
+        else:
+            contexts_str.append(str(ctx))
+    
+    combined_text = ' '.join(contexts_str)
     sentiment_score = analyze_sentiment_vader(combined_text, analyzer)
     
-    mention_count = len(contexts)
+    mention_count = len(contexts_str)
     
     if sentiment_score > 0.2:
         prediction = 'POSITIVE'
@@ -111,11 +121,8 @@ def analyze_company_sentiment(company: str, contexts: List[str], analyzer) -> Di
     
     confidence = min(abs(sentiment_score) * (1 + min(mention_count / 10, 0.5)), 1.0)
     
-    # Ensure contexts is a list before slicing
-    if isinstance(contexts, list):
-        sample_contexts = contexts[:3]
-    else:
-        sample_contexts = []
+    # Use string contexts for sample
+    sample_contexts = contexts_str[:3]
     
     return {
         'company': company.title(),

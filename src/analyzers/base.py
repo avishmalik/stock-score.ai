@@ -173,8 +173,18 @@ def analyze_company_sentiment(
             'confidence': 0.0
         }
     
+    # Ensure contexts are strings (handle dict format from metadata)
+    contexts_str = []
+    for ctx in contexts:
+        if isinstance(ctx, dict):
+            contexts_str.append(ctx.get('sentence', str(ctx)))
+        elif isinstance(ctx, str):
+            contexts_str.append(ctx)
+        else:
+            contexts_str.append(str(ctx))
+    
     # Combine all contexts for this company
-    combined_text = ' '.join(contexts)
+    combined_text = ' '.join(contexts_str)
     
     # Get sentiment score
     if analyzer == 'textblob':
@@ -187,7 +197,7 @@ def analyze_company_sentiment(
         sentiment_score = analyze_sentiment_simple(combined_text)
     
     # Count mentions
-    mention_count = len(contexts)
+    mention_count = len(contexts_str)
     
     # Determine prediction
     if sentiment_score > 0.2:
@@ -206,7 +216,7 @@ def analyze_company_sentiment(
         'mentions': mention_count,
         'prediction': prediction,
         'confidence': round(confidence, 3),
-        'contexts': contexts[:3]  # Store first 3 contexts as examples
+        'contexts': contexts_str[:3]  # Store first 3 contexts as examples
     }
 
 

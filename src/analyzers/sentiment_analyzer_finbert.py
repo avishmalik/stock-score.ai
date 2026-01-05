@@ -181,12 +181,22 @@ def analyze_company_sentiment(company: str, contexts: List[str], pipeline_obj) -
             'confidence': 0.0
         }
     
+    # Ensure contexts are strings (handle dict format from metadata)
+    contexts_str = []
+    for ctx in contexts:
+        if isinstance(ctx, dict):
+            contexts_str.append(ctx.get('sentence', str(ctx)))
+        elif isinstance(ctx, str):
+            contexts_str.append(ctx)
+        else:
+            contexts_str.append(str(ctx))
+    
     # Combine contexts but keep them manageable for FinBERT
     # FinBERT works better with individual sentences, so we'll analyze each context
-    combined_text = ' '.join(contexts)
+    combined_text = ' '.join(contexts_str)
     sentiment_score = analyze_sentiment_finbert(combined_text, pipeline_obj)
     
-    mention_count = len(contexts)
+    mention_count = len(contexts_str)
     
     if sentiment_score > 0.2:
         prediction = 'POSITIVE'
@@ -204,7 +214,7 @@ def analyze_company_sentiment(company: str, contexts: List[str], pipeline_obj) -
         'mentions': mention_count,
         'prediction': prediction,
         'confidence': round(confidence, 3),
-        'contexts': contexts[:3]
+        'contexts': contexts_str[:3]
     }
 
 

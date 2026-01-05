@@ -6,10 +6,22 @@ Combines sentiment analysis results into a concise report optimized for ChatGPT.
 
 import json
 import os
+import sys
 from pathlib import Path
 from collections import defaultdict
 from datetime import datetime
 from typing import Dict, List, Any
+
+# Add project root to path for imports
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
+
+from src.core.stock_data_fetcher import (
+    get_stock_data,
+    format_stock_info_for_prompt,
+    get_company_trends_search_query,
+    get_nse_symbol
+)
 
 
 def load_analysis_files(analysis_dir: Path) -> List[Dict[str, Any]]:
@@ -237,13 +249,16 @@ def create_cursor_prompt(report: str) -> str:
 def create_chatgpt_prompt(report: str, transcription: str, company_data: Dict[str, Dict]) -> str:
     """Create a detailed prompt for ChatGPT with full context."""
     
-    # Build detailed company analysis section
+    # Build detailed company analysis section with stock data
     detailed_companies = []
     sorted_companies = sorted(
         [(name, data) for name, data in company_data.items() if not data.get('likely_false_positive', False) and data.get('sentiment_scores')],
         key=lambda x: abs(x[1].get('consensus_score', 0)),
         reverse=True
     )
+    
+    print("\n📊 Fetching stock data for companies...")
+    stock_data_cache = {}
     
     for company, data in sorted_companies:
         consensus = data.get('consensus_score', 0)
@@ -253,7 +268,31 @@ def create_chatgpt_prompt(report: str, transcription: str, company_data: Dict[st
         algorithms = len(set(data.get('algorithms', [])))
         best_algo = data.get('best_algorithm', 'N/A')
         
-        detailed_companies.append(f"""
+        # Fetch stock data
+        stock_info = None
+        nse_symbol = None
+        if company not in stock_data_cache:
+            try:
+                stock_info = get_stock_data(company)
+                if stock_info:
+                    stock_data_cache[company] = stock_info
+                    nse_symbol = stock_info.get('symbol')
+                    print(f"  ✓ Fetched data for {company} ({nse_symbol})")
+                else:
+                    nse_symbol = get_nse_symbol(company)
+                    stock_data_cache[company] = None
+                    if nse_symbol:
+                        print(f"  ⚠️  Could not fetch data for {company} (symbol: {nse_symbol})")
+            except Exception as e:
+                print(f"  ⚠️  Error fetching stock data for {company}: {e}")
+                stock_data_cache[company] = None
+        else:
+            stock_info = stock_data_cache[company]
+            if stock_info:
+                nse_symbol = stock_info.get('symbol')
+        
+        # Build company section
+        company_section = f"""
 **{company.upper()}**
 - Consensus Sentiment Score: {consensus:+.3f} ({prediction})
 - Analyzer Agreement: {agreement:.1%} ({max(data['predictions'].values())}/{sum(data['predictions'].values())} analyzers agree)
@@ -262,7 +301,22 @@ def create_chatgpt_prompt(report: str, transcription: str, company_data: Dict[st
 - Best Performing Model: {best_algo}
 - Sample Contexts:
 {chr(10).join(f'  • "{ctx[:200]}..."' if len(ctx) > 200 else f'  • "{ctx}"' for ctx in data.get('contexts', [])[:2])}
-""")
+"""
+        
+        # Add stock data if available
+        if stock_info:
+            company_section += "\n**CURRENT STOCK STATUS:**\n"
+            company_section += format_stock_info_for_prompt(stock_info)
+            company_section += "\n"
+        elif nse_symbol:
+            company_section += f"\n**STOCK SYMBOL**: {nse_symbol} (data fetch failed - please verify via web search)\n"
+        
+        # Add web search query for trends
+        search_query = get_company_trends_search_query(company, nse_symbol)
+        company_section += f"\n**WEB SEARCH QUERY FOR TRENDS**: \"{search_query}\"\n"
+        company_section += "  (Use this query to search for recent news, earnings, analyst reports, and market trends)\n"
+        
+        detailed_companies.append(company_section)
     
     companies_section = "\n".join(detailed_companies)
     
@@ -288,11 +342,13 @@ Below is a comprehensive sentiment analysis report generated from 7 different AI
    - Frequency of mentions (more mentions may indicate stronger market focus)
    - Context and quotes from source material
 
-2. **Web Verification**: For each significant company recommendation:
-   - Use web search to verify recent news, earnings reports, and stock performance
-   - Cross-reference sentiment analysis with actual market data
-   - Check for any breaking news or events that might affect recommendations
-   - Verify analyst ratings and price targets from financial institutions
+2. **Web Verification & Stock Data**: For each significant company recommendation:
+   - **Stock Price & Status**: Current stock prices, price changes, and market data are provided below for each company. Verify these are current and accurate.
+   - **Company Trends**: Use the provided web search queries to find recent news, earnings reports, analyst ratings, and market trends
+   - **Cross-Reference**: Compare sentiment analysis with actual stock performance and market data
+   - **Breaking News**: Check for any recent events, earnings announcements, or regulatory changes that might affect recommendations
+   - **Analyst Coverage**: Verify analyst ratings, price targets, and recommendations from financial institutions
+   - **Market Context**: Consider sector performance, market trends, and macroeconomic factors
 
 3. **Comprehensive Recommendations**: Provide detailed, actionable recommendations including:
    - Entry prices and stop-loss levels
@@ -341,14 +397,15 @@ Based on the sentiment analysis, detailed company data, and full source material
    - Market outlook (bullish/bearish/neutral with reasoning)
 
 2. **TOP 5 BUY RECOMMENDATIONS** (Detailed for each)
-   - Company name and ticker symbol (if identifiable)
-   - Current price context (if available from web search)
-   - Entry strategy (price levels, timing)
-   - Target prices (short-term and medium-term)
-   - Stop-loss levels
+   - Company name and ticker symbol (NSE symbol provided in stock data)
+   - **Current Stock Status**: Use the provided stock price, change %, and market data. Compare with current market prices via web search to ensure accuracy.
+   - **Company Trends**: Use the provided web search query to find recent news, earnings, analyst reports, and market trends. Summarize key findings.
+   - Entry strategy (price levels, timing) - reference current price from stock data
+   - Target prices (short-term and medium-term) - calculate based on current price
+   - Stop-loss levels - calculate based on current price and volatility
    - Risk-reward ratio
    - Position sizing recommendation
-   - Key catalysts and reasoning
+   - Key catalysts and reasoning (from web search results)
    - Risk factors specific to this stock
    - Time horizon for the trade/investment
 

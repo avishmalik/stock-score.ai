@@ -282,18 +282,41 @@ def analyze_company_sentiment(company: str, contexts: List[str], pipeline_obj) -
             'confidence': 0.0
         }
     
-    # Ensure contexts is a list (handle both list and dict formats)
+    # Ensure contexts are strings (handle dict format from metadata)
+    # Contexts can be a list of strings or a dict with company names as keys
+    contexts_str = []
     if isinstance(contexts, dict):
-        # If it's a dict, extract the sentences
-        contexts = [item.get('sentence', item) if isinstance(item, dict) else item for item in contexts.values()]
-    elif isinstance(contexts, list) and contexts and isinstance(contexts[0], dict):
-        # If it's a list of dicts, extract sentences
-        contexts = [item.get('sentence', item) if isinstance(item, dict) else item for item in contexts]
+        # If contexts is a dict, extract values
+        for ctx in contexts.values():
+            if isinstance(ctx, dict):
+                contexts_str.append(ctx.get('sentence', str(ctx)))
+            elif isinstance(ctx, str):
+                contexts_str.append(ctx)
+            elif isinstance(ctx, list):
+                # Handle nested lists
+                for item in ctx:
+                    if isinstance(item, dict):
+                        contexts_str.append(item.get('sentence', str(item)))
+                    elif isinstance(item, str):
+                        contexts_str.append(item)
+            else:
+                contexts_str.append(str(ctx))
+    elif isinstance(contexts, list):
+        # If contexts is a list
+        for ctx in contexts:
+            if isinstance(ctx, dict):
+                contexts_str.append(ctx.get('sentence', str(ctx)))
+            elif isinstance(ctx, str):
+                contexts_str.append(ctx)
+            else:
+                contexts_str.append(str(ctx))
+    else:
+        contexts_str.append(str(contexts))
     
-    combined_text = ' '.join(contexts)
+    combined_text = ' '.join(contexts_str)
     sentiment_score = analyze_sentiment_xlm_roberta(combined_text, pipeline_obj)
     
-    mention_count = len(contexts)
+    mention_count = len(contexts_str)
     
     if sentiment_score > 0.2:
         prediction = 'POSITIVE'
@@ -310,7 +333,7 @@ def analyze_company_sentiment(company: str, contexts: List[str], pipeline_obj) -
         'total_mentions': mention_count,
         'prediction': prediction,
         'confidence': round(confidence, 3),
-        'sample_contexts': contexts[:3] if isinstance(contexts, list) else []
+        'sample_contexts': contexts_str[:3]
     }
 
 
